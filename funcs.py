@@ -16,9 +16,6 @@ from sympy.physics.quantum import TensorProduct as kr
 # 3. Internal imports
 from combine import combine
 
-sx, sy, sz = [sympy.physics.matrices.msigma(i) for i in range(1, 4)]
-s0 = sympy.eye(2)
-
 # Parameters taken from arXiv:1204.2792
 # All constant parameters, mostly fundamental constants, in a SimpleNamespace.
 constants = SimpleNamespace(
@@ -36,8 +33,9 @@ constants.mu_B = physical_constants['Bohr magneton'][0] / constants.meV
 
 # Hamiltonian and system definition
 
-
 def discretized_hamiltonian(a):
+    sx, sy, sz = [sympy.physics.matrices.msigma(i) for i in range(1, 4)]
+    s0 = sympy.eye(2)
     k_x, k_y, k_z = kwant.continuum.momentum_operators
     x, y, z = kwant.continuum.position_operators
     B_x, B_y, B_z, Delta, mu, alpha, g, mu_B, hbar = sympy.symbols(
@@ -107,7 +105,6 @@ def apply_peierls_to_template(template):
 
 
 # Shape functions
-
 
 def square_sector(r_out, r_in=0, L=1, L0=0, phi=360, angle=0, a=10):
     """Returns the shape function and start coords of a wire
@@ -201,7 +198,6 @@ def at_interface(site1, site2, shape1, shape2):
 
 # System construction
 
-
 def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
                  with_leads, with_shell, shape):
     """Create a cylindrical 3D wire covered with a
@@ -279,7 +275,8 @@ def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
                 syst[site1, site2] = tunnel_hops[delta(site1, site2)]
 
     if with_leads:
-        cons_law = np.kron(np.eye(2), -np.array(sz).astype(np.float))
+        sz = np.array([[1, 0], [0, -1]])
+        cons_law = np.kron(np.eye(2), -sz)
         lead = kwant.Builder(symmetry, conservation_law=cons_law)
         lead.fill(templ_sm, *shape_normal_lead)
         syst.attach_lead(lead)
@@ -354,7 +351,6 @@ def make_lead(a, r1, r2, phi, angle, with_shell, shape):
 
 # Physics functions
 
-
 def andreev_conductance(syst, params, E=100e-3, verbose=False):
     """Conductance is N - R_ee + R_he"""
     smatrix = kwant.smatrix(syst, energy=E, params=params)
@@ -424,7 +420,7 @@ def modes(h_cell, h_hop, tol=1e6):
     return ev
 
 
-def find_gap(lead, params, tol=1e-3):
+def find_gap(lead, params, E_bias=0, tol=1e-3):
     """Finds the gapsize by peforming a binary search of the modes with a
     tolarance of tol.
     Parameters:
