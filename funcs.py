@@ -1,5 +1,7 @@
 # 1. Standard library imports
+from functools import lru_cache
 import operator
+import subprocess
 from types import SimpleNamespace
 
 # 2. External package imports
@@ -7,7 +9,6 @@ import holoviews as hv
 import kwant
 from kwant.continuum.discretizer import discretize
 from kwant.digest import uniform
-import matplotlib.pyplot as plt
 import numpy as np
 from scipy.constants import hbar, m_e, eV, physical_constants, e
 import sympy
@@ -30,6 +31,13 @@ constants = SimpleNamespace(
 constants.t = (hbar ** 2 / (2 * constants.m_eff)) * constants.c
 constants.mu_B = physical_constants['Bohr magneton'][0] / constants.meV
 
+# General functions
+
+def get_git_revision_hash():
+    """Get the git hash to save with data to ensure reproducibility."""
+    git_output = subprocess.check_output(['git', 'rev-parse', 'HEAD'])
+    return git_output.decode("utf-8").replace('\n', '')
+
 
 # Hamiltonian and system definition
 
@@ -38,13 +46,13 @@ def discretized_hamiltonian(a):
     s0 = sympy.eye(2)
     k_x, k_y, k_z = kwant.continuum.momentum_operators
     x, y, z = kwant.continuum.position_operators
-    B_x, B_y, B_z, Delta, mu, alpha, g, mu_B, hbar = sympy.symbols(
-        'B_x B_y B_z Delta mu alpha g mu_B hbar', real=True)
+    B_x, B_y, B_z, Delta, mu, alpha, g, mu_B, hbar, V = sympy.symbols(
+        'B_x B_y B_z Delta mu alpha g mu_B hbar V', real=True)
     m_eff, mu_sc, mu_sm = sympy.symbols(
         'm_eff, mu_sc, mu_sm', commutative=False)
     c, c_tunnel = sympy.symbols('c, c_tunnel')  # c should be (1e18 / constants.meV) if in nm and meV
     kin = (1 / 2) * hbar**2 * (k_x**2 + k_y**2 + k_z**2) / m_eff * c
-    ham = ((kin - mu) * kr(s0, sz) +
+    ham = ((kin - mu + V) * kr(s0, sz) +
            alpha * (k_y * kr(sx, sz) - k_x * kr(sy, sz)) +
            0.5 * g * mu_B * (B_x * kr(sx, s0) + B_y * kr(sy, s0) + B_z * kr(sz, s0)) +
            Delta * kr(s0, sx))
@@ -284,6 +292,7 @@ def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
     return syst.finalized()
 
 
+@lru_cache()
 def make_lead(a, r1, r2, phi, angle, with_shell, shape):
     """Create an infinite cylindrical 3D wire partially covered with a
     superconducting (SC) shell.
