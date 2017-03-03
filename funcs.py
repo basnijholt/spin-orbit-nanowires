@@ -417,6 +417,32 @@ def translation_ev(h, t, tol=1e6):
     ev = kwant.physics.leads.unified_eigenproblem(a, b, tol=tol)[0]
     return ev
 
+def gap_minimizer(lead, params, energy):
+    """Function that minimizes a function to find the band gap.
+    This objective function checks if there are progagating modes at a
+    certain energy. Returns zero if there is a propagating mode.
+
+    Parameters
+    ----------
+    lead : kwant.builder.InfiniteSystem object
+        The finalized infinite system.
+    params : dict
+        A dict that is used to store Hamiltonian parameters.
+    energy : float
+        Energy at which this function checks for propagating modes.
+
+    Returns
+    -------
+    minimized_scalar : float
+        Value that is zero when there is a propagating mode.
+    """
+    h = lead.cell_hamiltonian(params=params)
+    t = lead.inter_cell_hopping(params=params)
+    h -= energy * np.identity(len(h))
+    ev = translation_ev(h, t)
+    norm = (ev * ev.conj()).real
+    return np.min(np.abs(norm - 1))
+
 
 def find_gap(lead, params, tol=1e-3):
     """Finds the gapsize by peforming a binary search of the modes with a
@@ -436,32 +462,6 @@ def find_gap(lead, params, tol=1e-3):
     gap : float
         Size of the gap.
     """
-    def gap_minimizer(lead, params, energy):
-        """Function that minimizes a function to find the band gap.
-        This objective function checks if there are progagating modes at a
-        certain energy. Returns zero if there is a propagating mode.
-
-        Parameters
-        ----------
-        lead : kwant.builder.InfiniteSystem object
-            The finalized infinite system.
-        params : dict
-            A dict that is used to store Hamiltonian parameters.
-        energy : float
-            Energy at which this function checks for propagating modes.
-
-        Returns
-        -------
-        minimized_scalar : float
-            Value that is zero when there is a propagating mode.
-        """
-        h = lead.cell_hamiltonian(params=params)
-        t = lead.inter_cell_hopping(params=params)
-        h -= energy * np.identity(len(h))
-        ev = translation_ev(h, t)
-        norm = (ev * ev.conj()).real
-        return np.sort(np.abs(norm - 1))[0]
-
     bands = kwant.physics.Bands(lead, params=params)
     band_k_0 = np.abs(bands(k=0)).min()
     lim = [0, band_k_0]
