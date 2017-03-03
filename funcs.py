@@ -70,12 +70,17 @@ def discretized_hamiltonian(a):
 
 def add_disorder_to_template(template):
     def onsite_dis(site, disorder, salt):
-        identity = np.eye(4)
-        return disorder * (uniform(repr(site), repr(salt)) - .5) * identity
+        s0 = np.eye(2)
+        sz = np.array([[1, 0], [0, 1]])
+        s0sz = np.kron(s0, sz)
+        spin = holes = True
+        mat = s0sz if spin and holes else s0 if spin else sz
+        mat = np.array(mat).astype(complex)
+        return disorder * (uniform(repr(site), repr(salt)) - .5) * mat
 
     for site, onsite in template.site_value_pairs():
         onsite = template[site]
-        template[first_site] = combine(onsite, onsite_dis, operator.add, 1)
+        template[site] = combine(onsite, onsite_dis, operator.add, 1)
 
     return template
 
