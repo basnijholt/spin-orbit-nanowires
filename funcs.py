@@ -145,7 +145,7 @@ def square_sector(r_out, r_in=0, L=1, L0=0, phi=360, angle=0, a=10):
     (shape_func, *(start_coords))
     """
     r_in /= 2
-    r_out /= 2 
+    r_out /= 2
     if r_in > 0:
         def shape(site):
             x, y, z = site.pos
@@ -196,13 +196,14 @@ def cylinder_sector(r_out, r_in=0, L=1, L0=0, phi=360, angle=0, a=10):
         rsq = y**2 + z**2
         shape_yz = r_in_sq <= rsq < r_out_sq and z >= np.cos(phi) * np.sqrt(rsq)
         return (shape_yz and L0 <= x < L) if L > 0 else shape_yz
-    
+
     r_mid = (r_out + r_in) / 2
-    start_coords = np.array([L - a, 
-                             r_mid * np.sin(angle), 
+    start_coords = np.array([L - a,
+                             r_mid * np.sin(angle),
                              r_mid * np.cos(angle)])
 
     return shape, np.round(start_coords / a).astype(int)
+
 
 def at_interface(site1, site2, shape1, shape2):
     return ((shape1[0](site1) and shape2[0](site2)) or
@@ -214,7 +215,7 @@ def at_interface(site1, site2, shape1, shape2):
 def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
                  with_leads, with_shell, shape):
     """Create a cylindrical 3D wire covered with a
-    superconducting (SC) shell, but without superconductor in 
+    superconducting (SC) shell, but without superconductor in
     leads.
 
     Parameters
@@ -279,7 +280,7 @@ def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
 
     if with_shell:
         syst.fill(templ_sc, *shape_sc)
-        
+
         # Adding a tunnel barrier between SM and SC
         tunnel_hops = {delta(s1, s2): hop for
                        (s1, s2), hop in templ_barrier.hopping_value_pairs()}
@@ -352,7 +353,7 @@ def make_lead(a, r1, r2, phi, angle, with_shell, shape):
     lead.fill(templ_sm, *shape_normal_lead)
     if with_shell:
         lead.fill(templ_sc, *shape_sc_lead)
-        
+
         # Adding a tunnel barrier between SM and SC
         tunnel_hops = {delta(s1, s2): hop for
                        (s1, s2), hop in templ_barrier.hopping_value_pairs()}
@@ -387,58 +388,42 @@ def andreev_conductance(syst, params, E=100e-3, verbose=False):
 def bands(lead, params, ks=None):
     if ks is None:
         ks = np.linspace(-3, 3)
-        
+
     bands = kwant.physics.Bands(lead, params=params)
     return np.array([bands(k) for k in ks])
 
 
-def modes(h_cell, h_hop, tol=1e6):
+def translation_ev(h, t, tol=1e6):
     """Compute the eigendecomposition of a translation operator of a lead.
     Adapted from kwant.physics.leads.modes such that it returns the eigenvalues.
-    Parameters:
+
+    Parameters
     ----------
-    h_cell : numpy array, real or complex, shape (N, N) The unit cell
+    h : numpy array, real or complex, shape (N, N) The unit cell
         Hamiltonian of the lead unit cell.
-    h_hop : numpy array, real or complex, shape (N, M)
+    t : numpy array, real or complex, shape (N, M)
         The hopping matrix from a lead cell to the one on which self-energy
         has to be calculated (and any other hopping in the same direction).
     tol : float
         Numbers and differences are considered zero when they are smaller
         than `tol` times the machine precision.
+
     Returns
     -------
     ev : numpy array
         Eigenvalues of the translation operator in the form lambda=exp(i*k).
     """
-    m = h_hop.shape[1]
-    n = h_cell.shape[0]
-
-    if (h_cell.shape[0] != h_cell.shape[1] or
-            h_cell.shape[0] != h_hop.shape[0]):
-        raise ValueError("Incompatible matrix sizes for h_cell and h_hop.")
-
-    # Note: np.any(h_hop) returns (at least from numpy 1.6.1 - 1.8-devel)
-    #       False if h_hop is purely imaginary
-    if not (np.any(h_hop.real) or np.any(h_hop.imag)):
-        v = np.empty((0, m))
-        return (kwant.physics.PropagatingModes(np.empty((0, n)), np.empty((0,)),
-                                               np.empty((0,))),
-                kwant.physics.StabilizedModes(np.empty((0, 0)),
-                                              np.empty((0, 0)), 0, v))
-
-    # Defer most of the calculation to helper routines.
-    matrices, v, extract = kwant.physics.leads.setup_linsys(
-        h_cell, h_hop, tol, None)
-    ev = kwant.physics.leads.unified_eigenproblem(*(matrices + (tol,)))[0]
-
+    a, b = kwant.physics.leads.setup_linsys(h, t, tol, None).eigenproblem
+    ev = kwant.physics.leads.unified_eigenproblem(a, b, tol=tol)[0]
     return ev
 
 
-def find_gap(lead, params, E_bias=0, tol=1e-3):
+def find_gap(lead, params, tol=1e-3):
     """Finds the gapsize by peforming a binary search of the modes with a
     tolarance of tol.
-    Parameters:
-    -----------
+
+    Parameters
+    ----------
     lead : kwant.builder.InfiniteSystem object
         The finalized infinite system.
     params : dict
@@ -446,8 +431,8 @@ def find_gap(lead, params, E_bias=0, tol=1e-3):
     tol : float
         The precision of the binary search.
 
-    Returns:
-    --------
+    Returns
+    -------
     gap : float
         Size of the gap.
     """
@@ -455,21 +440,25 @@ def find_gap(lead, params, E_bias=0, tol=1e-3):
         """Function that minimizes a function to find the band gap.
         This objective function checks if there are progagating modes at a
         certain energy. Returns zero if there is a propagating mode.
-        Parameters:
-        -----------
+
+        Parameters
+        ----------
+        lead : kwant.builder.InfiniteSystem object
+            The finalized infinite system.
+        params : dict
+            A dict that is used to store Hamiltonian parameters.
         energy : float
             Energy at which this function checks for propagating modes.
-        h0 : numpy array
-            Onsite Hamiltonian, syst.cell_hamiltonian(params=params)
-        t0 : numpy array
-            Hopping matrix, syst.inter_cell_hopping(params=params)
-        Returns:
-        --------
+
+        Returns
+        -------
         minimized_scalar : float
             Value that is zero when there is a propagating mode.
         """
-        h, t = lead.cell_hamiltonian(params=params), lead.inter_cell_hopping(params=params)
-        ev = modes(h - energy * np.identity(len(h)), t)
+        h = lead.cell_hamiltonian(params=params)
+        t = lead.inter_cell_hopping(params=params)
+        h -= energy * np.identity(len(h))
+        ev = translation_ev(h, t)
         norm = (ev * ev.conj()).real
         return np.sort(np.abs(norm - 1))[0]
 
