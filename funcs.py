@@ -258,7 +258,8 @@ def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
     >>> syst, hopping = make_3d_wire(**syst_params)
 
     """
-    templ_sm, templ_sc, templ_barrier = map(apply_peierls_to_template, discretized_hamiltonian(a))
+    templ_sm, templ_sc, templ_barrier = map(apply_peierls_to_template,
+                                            discretized_hamiltonian(a))
     symmetry = kwant.TranslationalSymmetry((a, 0, 0))
     syst = kwant.Builder()
 
@@ -336,7 +337,8 @@ def make_lead(a, r1, r2, phi, angle, with_shell, shape):
     >>> syst, hopping = make_lead(**syst_params)
 
     """
-    templ_sm, templ_sc, templ_barrier = map(apply_peierls_to_template, discretized_hamiltonian(a))
+    templ_sm, templ_sc, templ_barrier = map(apply_peierls_to_template,
+                                            discretized_hamiltonian(a))
     symmetry = kwant.TranslationalSymmetry((a, 0, 0))
 
     if shape == 'square':
@@ -390,12 +392,16 @@ def bands(lead, params, ks=None):
         ks = np.linspace(-3, 3)
 
     bands = kwant.physics.Bands(lead, params=params)
-    return np.array([bands(k) for k in ks])
+
+    if isinstance(ks, (float, int)):
+        return bands(ks)
+    else:
+        return np.array([bands(k) for k in ks])
 
 
 def translation_ev(h, t, tol=1e6):
-    """Compute the eigendecomposition of a translation operator of a lead.
-    Adapted from kwant.physics.leads.modes such that it returns the eigenvalues.
+    """Compute the eigen values of the translation operator of a lead.
+    Adapted from kwant.physics.leads.modes.
 
     Parameters
     ----------
@@ -417,6 +423,13 @@ def translation_ev(h, t, tol=1e6):
     ev = kwant.physics.leads.unified_eigenproblem(a, b, tol=tol)[0]
     return ev
 
+
+def cell_mats(lead, params):
+    h = lead.cell_hamiltonian(params=params)
+    t = lead.inter_cell_hopping(params=params)
+    return h, t
+
+
 def gap_minimizer(lead, params, energy):
     """Function that minimizes a function to find the band gap.
     This objective function checks if there are progagating modes at a
@@ -436,8 +449,7 @@ def gap_minimizer(lead, params, energy):
     minimized_scalar : float
         Value that is zero when there is a propagating mode.
     """
-    h = lead.cell_hamiltonian(params=params)
-    t = lead.inter_cell_hopping(params=params)
+    h, t = cell_mats(lead, params)
     h -= energy * np.identity(len(h))
     ev = translation_ev(h, t)
     norm = (ev * ev.conj()).real
@@ -462,18 +474,17 @@ def find_gap(lead, params, tol=1e-3):
     gap : float
         Size of the gap.
     """
-    bands = kwant.physics.Bands(lead, params=params)
-    band_k_0 = np.abs(bands(k=0)).min()
-    lim = [0, band_k_0]
+    lim = [0, np.abs(bands(lead, params, 0)).min()]
     if gap_minimizer(lead, params, energy=0) < 1e-15:
+        # No band gap
         gap = 0
     else:
         while lim[1] - lim[0] > tol:
-            energy = sum(lim) / 2.
+            energy = sum(lim) / 2
             par = gap_minimizer(lead, params, energy)
             if par < 1e-10:
                 lim[1] = energy
             else:
                 lim[0] = energy
-        gap = sum(lim) / 2.
+        gap = sum(lim) / 2
     return gap
