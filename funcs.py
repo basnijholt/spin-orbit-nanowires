@@ -1,6 +1,14 @@
+# Test if using the correct Python version.
+import sys
+if sys.version_info < (3, 6):
+    # print("Use Python 3.6 or higher!")
+    # exit()
+    pass
+
 # 1. Standard library imports
 from functools import lru_cache
 import operator
+from itertools import product
 import subprocess
 from types import SimpleNamespace
 
@@ -31,12 +39,19 @@ constants = SimpleNamespace(
 constants.t = (hbar ** 2 / (2 * constants.m_eff)) * constants.c
 constants.mu_B = physical_constants['Bohr magneton'][0] / constants.meV
 
+
 # General functions
 
 def get_git_revision_hash():
     """Get the git hash to save with data to ensure reproducibility."""
     git_output = subprocess.check_output(['git', 'rev-parse', 'HEAD'])
     return git_output.decode("utf-8").replace('\n', '')
+
+
+def named_product(**items):
+    names = items.keys()
+    vals = items.values()
+    return [dict(zip(names, res)) for res in product(*vals)]
 
 
 # Hamiltonian and system definition
@@ -103,7 +118,8 @@ def phase(site1, site2, B_x, B_y, B_z, orbital, e, hbar):
         if lat.norbs == 2:  # No PH degrees of freedom
             return phi
         elif lat.norbs == 4:
-            return np.array([phi, phi.conj(), phi, phi.conj()], dtype='complex128')
+            return np.array([phi, phi.conj(), phi, phi.conj()],
+                            type='complex128')
     else:  # No orbital phase
         return 1
 
@@ -401,6 +417,7 @@ def bands(lead, params, ks=None):
 
 def translation_ev(h, t, tol=1e6):
     """Compute the eigen values of the translation operator of a lead.
+
     Adapted from kwant.physics.leads.modes.
 
     Parameters
@@ -424,8 +441,9 @@ def translation_ev(h, t, tol=1e6):
     return ev
 
 
-def cell_mats(lead, params):
+def cell_mats(lead, params, bias=0):
     h = lead.cell_hamiltonian(params=params)
+    h -= bias * np.identity(len(h))
     t = lead.inter_cell_hopping(params=params)
     return h, t
 
@@ -449,8 +467,7 @@ def gap_minimizer(lead, params, energy):
     minimized_scalar : float
         Value that is zero when there is a propagating mode.
     """
-    h, t = cell_mats(lead, params)
-    h -= energy * np.identity(len(h))
+    h, t = cell_mats(lead, params, bias=energy)
     ev = translation_ev(h, t)
     norm = (ev * ev.conj()).real
     return np.min(np.abs(norm - 1))
