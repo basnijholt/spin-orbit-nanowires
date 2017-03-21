@@ -1,3 +1,6 @@
+# TO-DO
+# * check if tunnel barrier works in make_lead
+
 # Test if using the correct Python version.
 import sys
 if sys.version_info < (3, 6):
@@ -6,14 +9,14 @@ if sys.version_info < (3, 6):
     pass
 
 # 1. Standard library imports
-from functools import lru_cache
+# from functools import lru_cache
 import operator
 from itertools import product
 import subprocess
 from types import SimpleNamespace
 
 # 2. External package imports
-import holoviews as hv
+# import holoviews as hv
 import kwant
 from kwant.continuum.discretizer import discretize
 from kwant.digest import uniform
@@ -119,7 +122,7 @@ def phase(site1, site2, B_x, B_y, B_z, orbital, e, hbar):
             return phi
         elif lat.norbs == 4:
             return np.array([phi, phi.conj(), phi, phi.conj()],
-                            type='complex128')
+                            dtype='complex128')
     else:  # No orbital phase
         return 1
 
@@ -315,7 +318,7 @@ def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
     return syst.finalized()
 
 
-@lru_cache()
+# @lru_cache()
 def make_lead(a, r1, r2, phi, angle, with_shell, shape):
     """Create an infinite cylindrical 3D wire partially covered with a
     superconducting (SC) shell.
@@ -434,7 +437,8 @@ def translation_ev(h, t, tol=1e6):
     Returns
     -------
     ev : numpy array
-        Eigenvalues of the translation operator in the form lambda=exp(i*k).
+        Eigenvalues of the translation operator in the form lambda=r*exp(i*k),
+        for |r|=1 they are propagating modes.
     """
     a, b = kwant.physics.leads.setup_linsys(h, t, tol, None).eigenproblem
     ev = kwant.physics.leads.unified_eigenproblem(a, b, tol=tol)[0]
@@ -473,7 +477,7 @@ def gap_minimizer(lead, params, energy):
     return np.min(np.abs(norm - 1))
 
 
-def find_gap(lead, params, tol=1e-3):
+def find_gap(lead, params, tol=1e-6):
     """Finds the gapsize by peforming a binary search of the modes with a
     tolarance of tol.
 
@@ -491,7 +495,7 @@ def find_gap(lead, params, tol=1e-3):
     gap : float
         Size of the gap.
     """
-    lim = [0, np.abs(bands(lead, params, 0)).min()]
+    lim = [0, np.abs(bands(lead, params, ks=0)).min()]
     if gap_minimizer(lead, params, energy=0) < 1e-15:
         # No band gap
         gap = 0
