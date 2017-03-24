@@ -107,31 +107,36 @@ def spherical_coords_vec(rs, thetas, phis, degrees=True, unique=True):
 
 # Hamiltonian and system definition
 
-def discretized_hamiltonian(a):
+def discretized_hamiltonian(a, lead=False):
     sx, sy, sz = [sympy.physics.matrices.msigma(i) for i in range(1, 4)]
     s0 = sympy.eye(2)
     k_x, k_y, k_z = kwant.continuum.momentum_operators
     x, y, z = kwant.continuum.position_operators
-    B_x, B_y, B_z, Delta, mu, alpha, g, mu_B, hbar, V = sympy.symbols(
-        'B_x B_y B_z Delta mu alpha g mu_B hbar V', real=True)
-    m_eff, mu_sc, mu_sm = sympy.symbols(
-        'm_eff, mu_sc, mu_sm', commutative=False)
+    B_x, B_y, B_z, Delta, mu, alpha, g, mu_B, hbar, V, V_barrier = sympy.symbols(
+        'B_x B_y B_z Delta mu alpha g mu_B hbar V V_barrier', real=True)
+    m_eff, mu_lead = sympy.symbols(
+        'm_eff, mu_lead', commutative=False)
     c, c_tunnel = sympy.symbols('c, c_tunnel')  # c should be (1e18 / constants.meV) if in nm and meV
     kin = (1 / 2) * hbar**2 * (k_x**2 + k_y**2 + k_z**2) / m_eff * c
-    ham = ((kin - mu + V) * kr(s0, sz) +
+    ham = ((kin - mu + V + V_barrier) * kr(s0, sz) +
            alpha * (k_y * kr(sx, sz) - k_x * kr(sy, sz)) +
            0.5 * g * mu_B * (B_x * kr(sx, s0) + B_y * kr(sy, s0) + B_z * kr(sz, s0)) +
            Delta * kr(s0, sx))
 
+    if lead:
+        mu = mu_lead
+
     args = dict(lattice_constant=a)
-    subs_sm = [(Delta, 0), (mu, mu_sm)]
-    subs_sc = [(g, 0), (alpha, 0), (mu, mu_sc)]
-    subs_barrier = [(c, c * c_tunnel), (alpha, 0), (mu, (mu_sc + mu_sm) / 2)]
+    subs_sm = [(Delta, 0), (V_barrier, 0)]
+    subs_sc = [(g, 0), (alpha, 0), (V_barrier, 0)]
+    subs_interface = [(c, c * c_tunnel), (alpha, 0), (V_barrier, 0)]
+    subs_barrier = [(Delta, 0)]
 
     templ_sm = discretize(ham.subs(subs_sm), **args)
     templ_sc = discretize(ham.subs(subs_sc), **args)
+    templ_interface = discretize(ham.subs(subs_interface), **args)
     templ_barrier = discretize(ham.subs(subs_barrier), **args)
-    return templ_sm, templ_sc, templ_barrier
+    return templ_sm, templ_sc, templ_interface, templ_barrier
 
 
 def add_disorder_to_template(template):
@@ -279,6 +284,7 @@ def at_interface(site1, site2, shape1, shape2):
 
 # System construction
 
+@lru_cache()
 def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
                  with_leads, with_shell, shape):
     """Create a cylindrical 3D wire covered with a
@@ -325,10 +331,12 @@ def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
     >>> syst, hopping = make_3d_wire(**syst_params)
 
     """
-    templ_sm, templ_sc, templ_barrier = map(apply_peierls_to_template,
-                                            discretized_hamiltonian(a))
+    templ_sm, templ_sc, templ_interface, templ_barrier = map(
+        apply_peierls_to_template, discretized_hamiltonian(a, lead=True))
     symmetry = kwant.TranslationalSymmetry((a, 0, 0))
-    syst = kwant.Builder()
+    sz = np.array([[1, 0], [0, -1]])
+    cons_law = np.kron(np.eye(2), -sz)
+    syst = kwant.Builder(conservation_law=cons_law)
 
     if shape == 'square':
         shape_function = square_sector
@@ -338,35 +346,35 @@ def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
         raise(NotImplementedError('Only square or circle wire cross section allowed'))
 
     shape_normal = shape_function(r_out=r1, angle=angle, L=L, a=a)
-    shape_normal_lead = shape_function(r_out=r1, angle=angle, L=-1, a=a)
-    shape_sc = shape_function(r_out=r2, r_in=r1, phi=phi, angle=angle, L0=0, L=L, a=a)
+    shape_barrier = shape_function(r_out=r1, angle=angle, L=a, a=a)
+    shape_sc = shape_function(r_out=r2, r_in=r1, phi=phi, angle=angle, L0=a, L=L, a=a)
 
     if onsite_disorder:
         templ_sm = add_disorder_to_template(templ_sm)
 
     syst.fill(templ_sm, *shape_normal)
+    syst.fill(templ_barrier, *shape_barrier, overwrite=True)
 
     if with_shell:
         syst.fill(templ_sc, *shape_sc)
 
         # Adding a tunnel barrier between SM and SC
         tunnel_hops = {delta(s1, s2): hop for
-                       (s1, s2), hop in templ_barrier.hopping_value_pairs()}
+                       (s1, s2), hop in templ_interface.hopping_value_pairs()}
         for (site1, site2), hop in syst.hopping_value_pairs():
             if at_interface(site1, site2, shape_normal, shape_sc):
                 syst[site1, site2] = tunnel_hops[delta(site1, site2)]
 
     if with_leads:
-        sz = np.array([[1, 0], [0, -1]])
-        cons_law = np.kron(np.eye(2), -sz)
-        lead = kwant.Builder(symmetry, conservation_law=cons_law)
-        lead.fill(templ_sm, *shape_normal_lead)
-        syst.attach_lead(lead)
+        lead = make_lead(a, r1, r2, phi, angle, with_shell=False, shape=shape)
+        # The lead at the side of the tunnel barrier.
         syst.attach_lead(lead.reversed())
+        # The second lead on the other side.
+        syst.attach_lead(lead)
     return syst.finalized()
 
 
-# @lru_cache()
+@lru_cache()
 def make_lead(a, r1, r2, phi, angle, with_shell, shape):
     """Create an infinite cylindrical 3D wire partially covered with a
     superconducting (SC) shell.
@@ -404,8 +412,9 @@ def make_lead(a, r1, r2, phi, angle, with_shell, shape):
     >>> syst, hopping = make_lead(**syst_params)
 
     """
-    templ_sm, templ_sc, templ_barrier = map(apply_peierls_to_template,
-                                            discretized_hamiltonian(a))
+    templ_sm, templ_sc, templ_interface, templ_barrier = map(
+        apply_peierls_to_template, discretized_hamiltonian(a))
+
     symmetry = kwant.TranslationalSymmetry((a, 0, 0))
 
     if shape == 'square':
@@ -418,19 +427,22 @@ def make_lead(a, r1, r2, phi, angle, with_shell, shape):
     shape_normal_lead = shape_function(r_out=r1, angle=angle, L=-1, a=a)
     shape_sc_lead = shape_function(r_out=r2, r_in=r1, phi=phi, angle=angle, L=-1, a=a)
 
-    lead = kwant.Builder(symmetry)
+    sz = np.array([[1, 0], [0, -1]])
+    cons_law = np.kron(np.eye(2), -sz)
+    lead = kwant.Builder(symmetry, conservation_law=cons_law)
+
     lead.fill(templ_sm, *shape_normal_lead)
     if with_shell:
         lead.fill(templ_sc, *shape_sc_lead)
 
         # Adding a tunnel barrier between SM and SC
         tunnel_hops = {delta(s1, s2): hop for
-                       (s1, s2), hop in templ_barrier.hopping_value_pairs()}
+                       (s1, s2), hop in templ_interface.hopping_value_pairs()}
         for (site1, site2), hop in lead.hopping_value_pairs():
             if at_interface(site1, site2, shape_normal_lead, shape_sc_lead):
                 lead[site1, site2] = tunnel_hops[delta(site1, site2)]
 
-    return lead.finalized()
+    return lead
 
 
 # Physics functions
