@@ -75,7 +75,7 @@ def spherical_coords(r, theta, phi, degrees=True):
                      else x for x in (r, theta, phi)]
 
     if degrees:
-        r, theta, phi = map(np.deg2rad, (r, theta, phi))
+        theta, phi = map(np.deg2rad, (theta, phi))
 
     x = r * np.sin(theta) * np.cos(phi)
     y = r * np.sin(theta) * np.sin(phi)
