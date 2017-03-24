@@ -4,9 +4,7 @@
 # Test if using the correct Python version.
 import sys
 if sys.version_info < (3, 6):
-    # print("Use Python 3.6 or higher!")
-    # exit()
-    pass
+    print("Use Python 3.6 or higher!")
 
 # 1. Standard library imports
 # from functools import lru_cache
@@ -55,6 +53,56 @@ def named_product(**items):
     names = items.keys()
     vals = items.values()
     return [dict(zip(names, res)) for res in product(*vals)]
+
+
+def unique_rows(coor):
+    coor_tuple = [tuple(x) for x in coor]
+    unique_coor = sorted(set(coor_tuple), key=lambda x: coor_tuple.index(x))
+    return np.array(unique_coor)
+
+
+def spherical_coords(r, theta, phi, degrees=True):
+    """Transform spherical coordinates to Cartesian.
+
+    Parameters
+    ----------
+    r, theta, phi : float or array
+        radial distance, polar angle θ, azimuthal angle φ.
+    degrees : bool
+        Degrees when True, radians when False.
+    """
+    r, theta, phi = [np.reshape(x, -1) if np.isscalar(x)
+                     else x for x in (r, theta, phi)]
+
+    if degrees:
+        r, theta, phi = map(np.deg2rad, (r, theta, phi))
+
+    x = r * np.sin(theta) * np.cos(phi)
+    y = r * np.sin(theta) * np.sin(phi)
+    z = r * np.cos(theta) + 0 * phi
+    return np.array([x, y, z]).T
+
+
+def spherical_coords_vec(rs, thetas, phis, degrees=True, unique=True):
+    """Spherical coordinates to Cartesian, combinations of the arguments.
+
+    Parameters
+    ----------
+    rs, thetas, phis : numpy array
+        radial distance, polar angle θ, azimuthal angle φ.
+    degrees : bool
+        Degrees when True, radians when False.
+    unique : bool
+        Only return the unique combinations of coordinates. Useful e.g.
+        when theta=0 or to avoid double values.
+    """
+    rs = np.reshape(rs, (-1, 1, 1))
+    thetas = np.reshape(thetas, (1, -1, 1))
+    phis = np.reshape(phis, (1, 1, -1))
+    vec = spherical_coords(rs, thetas, phis, degrees).reshape(-1, 3)
+    if unique:
+        vec = unique_rows(vec)
+    return vec
 
 
 # Hamiltonian and system definition
@@ -390,20 +438,20 @@ def make_lead(a, r1, r2, phi, angle, with_shell, shape):
 def andreev_conductance(syst, params, E=100e-3, verbose=False):
     """Conductance is N - R_ee + R_he"""
     smatrix = kwant.smatrix(syst, energy=E, params=params)
-    r_ee = smatrix.submatrix((0, 0), (0, 0))
-    r_eh = smatrix.submatrix((0, 0), (0, 1))
-    r_hh = smatrix.submatrix((0, 1), (0, 1))
-    r_he = smatrix.submatrix((0, 1), (0, 0))
-    c = lambda r: np.trace(r @ r.T.conj()).real
+    r_ee = smatrix.transmission((0, 0), (0, 0))
+    r_eh = smatrix.transmission((0, 0), (0, 1))
+    r_hh = smatrix.transmission((0, 1), (0, 1))
+    r_he = smatrix.transmission((0, 1), (0, 0))
 
     if verbose:
-        r_ = {'r_ee': c(r_ee), 'r_eh': c(r_eh), 'r_he': c(r_he), 'r_hh': c(r_hh)}
+        r_ = {'r_ee': r_ee, 'r_eh': r_eh, 'r_he': r_he, 'r_hh': r_hh}
         for key, val in r_.items():
             print('{val}: {key}'.format(val=val, key=key))
 
-    N_e = r_ee.shape[0]
+    N_e = smatrix.submatrix((0, 0), (0, 0)).shape[0]
 
-    return N_e - c(r_ee) + c(r_he)
+    return {'G_Andreev': N_e - r_ee + r_he,
+            'G_01': smatrix.transmission(0, 1)}
 
 
 def bands(lead, params, ks=None):
