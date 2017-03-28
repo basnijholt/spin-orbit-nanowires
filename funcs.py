@@ -7,7 +7,7 @@ if sys.version_info < (3, 6):
     print("Use Python 3.6 or higher!")
 
 # 1. Standard library imports
-# from functools import lru_cache
+from functools import lru_cache
 import operator
 from itertools import product
 import subprocess
@@ -47,6 +47,11 @@ def get_git_revision_hash():
     """Get the git hash to save with data to ensure reproducibility."""
     git_output = subprocess.check_output(['git', 'rev-parse', 'HEAD'])
     return git_output.decode("utf-8").replace('\n', '')
+
+
+def drop_constant_columns(df):
+    """Taken from http://stackoverflow.com/a/20210048/3447047"""
+    return df.loc[:, (df != df.ix[0]).any()]
 
 
 def named_product(**items):
