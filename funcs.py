@@ -1,6 +1,3 @@
-# TO-DO
-# * check if tunnel barrier works in make_lead
-
 # Test if using the correct Python version.
 import sys
 if sys.version_info < (3, 6):
@@ -19,7 +16,7 @@ import kwant
 from kwant.continuum.discretizer import discretize
 from kwant.digest import uniform
 import numpy as np
-from scipy.constants import hbar, m_e, eV, physical_constants, e
+import scipy.constants
 import sympy
 from sympy.physics.quantum import TensorProduct as kr
 
@@ -29,16 +26,15 @@ from combine import combine
 # Parameters taken from arXiv:1204.2792
 # All constant parameters, mostly fundamental constants, in a SimpleNamespace.
 constants = SimpleNamespace(
-    m_eff=0.015 * m_e,  # effective mass in kg
-    hbar=hbar,
-    m_e=m_e,
-    eV=eV,
-    e=e,
-    meV=eV * 1e-3,
-    c=1e18 / (eV * 1e-3))  # to get to meV * nm^2
+    m_eff=0.015 * scipy.constants.m_e,  # effective mass in kg
+    hbar=scipy.constants.hbar,
+    m_e=scipy.constants.m_e,
+    eV=scipy.constants.eV,
+    e=scipy.constants.e,
+    c=1e18 / (scipy.constants.eV * 1e-3),
+    mu_B=scipy.constants.physical_constants['Bohr magneton in eV/T'][0] * 1e3)  # to get to meV * nm^2
 
-constants.t = (hbar ** 2 / (2 * constants.m_eff)) * constants.c
-constants.mu_B = physical_constants['Bohr magneton'][0] / constants.meV
+constants.t = (constants.hbar ** 2 / (2 * constants.m_eff)) * constants.c
 
 
 # General functions
@@ -50,7 +46,7 @@ def get_git_revision_hash():
 
 
 def drop_constant_columns(df):
-    """Taken from http://stackoverflow.com/a/20210048/3447047"""
+    """Taken from http://stackoverflow.com/a/20210048/3447047."""
     return df.loc[:, (df != df.ix[0]).any()]
 
 
@@ -131,7 +127,7 @@ def discretized_hamiltonian(a, lead=False):
     if lead:
         mu = mu_lead
 
-    args = dict(lattice_constant=a)
+    args = dict(grid_spacing=a)
     subs_sm = [(Delta, 0), (V_barrier, 0)]
     subs_sc = [(g, 0), (alpha, 0), (V_barrier, 0)]
     subs_interface = [(c, c * c_tunnel), (alpha, 0), (V_barrier, 0)]
@@ -161,20 +157,14 @@ def add_disorder_to_template(template):
     return template
 
 
-def delta(site1, site2):
-    """This is still being used in tunnel_hops. Should not depend on
-    this to make the algo more robust."""
-    return np.argmax(site2.pos - site1.pos)
-
-
 def phase(site1, site2, B_x, B_y, B_z, orbital, e, hbar):
     x, y, z = site1.tag
     vec = site2.tag - site1.tag
-    lat = site1[0]
+    lat = site1.family
     a = np.max(lat.prim_vecs)  # lattice_contant
-    A = [B_y * z - B_z * y, 0, B_x * y]
-    A = np.dot(A, vec) * a**2 * 1e-18 * e / hbar
-    phi = np.exp(-1j * A)
+    vector_potential = [B_y * z - B_z * y, 0, B_x * y]
+    vector_potential = vector_potential @ vec * a**2 * 1e-18 * e / hbar
+    phi = np.exp(-1j * vector_potential)
     if orbital:
         if lat.norbs == 2:  # No PH degrees of freedom
             return phi
@@ -188,8 +178,6 @@ def phase(site1, site2, B_x, B_y, B_z, orbital, e, hbar):
 def apply_peierls_to_template(template):
     """Adds p.orbital argument to the hopping functions."""
     for (site1, site2), hop in template.hopping_value_pairs():
-        lat = site1[0]
-        a = np.max(lat.prim_vecs)
         template[site1, site2] = combine(hop, phase, operator.mul, 2)
     return template
 
@@ -287,6 +275,13 @@ def at_interface(site1, site2, shape1, shape2):
             (shape2[0](site1) and shape1[0](site2)))
 
 
+def change_hopping_at_interface(syst, template, shape1, shape2):
+    for (site1, site2), hop in syst.hopping_value_pairs():
+        if at_interface(site1, site2, shape1, shape2):
+            syst[site1, site2] = template[site1, site2]
+    return syst
+
+
 # System construction
 
 @lru_cache()
@@ -338,7 +333,7 @@ def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
     """
     templ_sm, templ_sc, templ_interface, templ_barrier = map(
         apply_peierls_to_template, discretized_hamiltonian(a, lead=True))
-    symmetry = kwant.TranslationalSymmetry((a, 0, 0))
+
     sz = np.array([[1, 0], [0, -1]])
     cons_law = np.kron(np.eye(2), -sz)
     syst = kwant.Builder(conservation_law=cons_law)
@@ -364,11 +359,8 @@ def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
         syst.fill(templ_sc, *shape_sc)
 
         # Adding a tunnel barrier between SM and SC
-        tunnel_hops = {delta(s1, s2): hop for
-                       (s1, s2), hop in templ_interface.hopping_value_pairs()}
-        for (site1, site2), hop in syst.hopping_value_pairs():
-            if at_interface(site1, site2, shape_normal, shape_sc):
-                syst[site1, site2] = tunnel_hops[delta(site1, site2)]
+        syst = change_hopping_at_interface(syst, templ_interface,
+                                           shape_normal, shape_sc)
 
     if with_leads:
         lead = make_lead(a, r1, r2, phi, angle, with_shell=False, shape=shape)
@@ -441,11 +433,8 @@ def make_lead(a, r1, r2, phi, angle, with_shell, shape):
         lead.fill(templ_sc, *shape_sc_lead)
 
         # Adding a tunnel barrier between SM and SC
-        tunnel_hops = {delta(s1, s2): hop for
-                       (s1, s2), hop in templ_interface.hopping_value_pairs()}
-        for (site1, site2), hop in lead.hopping_value_pairs():
-            if at_interface(site1, site2, shape_normal_lead, shape_sc_lead):
-                lead[site1, site2] = tunnel_hops[delta(site1, site2)]
+        lead = change_hopping_at_interface(lead, templ_interface,
+                                           shape_normal_lead, shape_sc_lead)
 
     return lead
 
