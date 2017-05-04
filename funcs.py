@@ -1,9 +1,10 @@
 # Test if using the correct Python version.
 import sys
 if sys.version_info < (3, 6):
-    print("Use Python 3.6 or higher!")
+    raise EnvironmentError("Use Python 3.6 or higher!")
 
 # 1. Standard library imports
+from copy import deepcopy
 from functools import lru_cache
 import operator
 from itertools import product
@@ -17,11 +18,10 @@ from kwant.continuum.discretizer import discretize
 from kwant.digest import uniform
 import numpy as np
 import scipy.constants
-import sympy
-from sympy.physics.quantum import TensorProduct as kr
 
 # 3. Internal imports
 from combine import combine
+
 
 # Parameters taken from arXiv:1204.2792
 # All constant parameters, mostly fundamental constants, in a SimpleNamespace.
@@ -60,6 +60,10 @@ def unique_rows(coor):
     coor_tuple = [tuple(x) for x in coor]
     unique_coor = sorted(set(coor_tuple), key=lambda x: coor_tuple.index(x))
     return np.array(unique_coor)
+
+
+def lat_from_temp(template):
+    return next(iter(template.sites())).family
 
 
 def spherical_coords(r, theta, phi, degrees=True):
@@ -108,46 +112,37 @@ def spherical_coords_vec(rs, thetas, phis, degrees=True, unique=True):
 
 # Hamiltonian and system definition
 
-def discretized_hamiltonian(a, lead=False):
-    sx, sy, sz = [sympy.physics.matrices.msigma(i) for i in range(1, 4)]
-    s0 = sympy.eye(2)
-    k_x, k_y, k_z = kwant.continuum.momentum_operators
-    x, y, z = kwant.continuum.position_operators
-    B_x, B_y, B_z, Delta, mu, alpha, g, mu_B, hbar, V, V_barrier = sympy.symbols(
-        'B_x B_y B_z Delta mu alpha g mu_B hbar V V_barrier', real=True)
-    m_eff, mu_lead = sympy.symbols(
-        'm_eff, mu_lead', commutative=False)
-    c, c_tunnel = sympy.symbols('c, c_tunnel')  # c should be (1e18 / constants.meV) if in nm and meV
-    kin = (1 / 2) * hbar**2 * (k_x**2 + k_y**2 + k_z**2) / m_eff * c
-    ham = ((kin - mu + V + V_barrier) * kr(s0, sz) +
-           alpha * (k_y * kr(sx, sz) - k_x * kr(sy, sz)) +
-           0.5 * g * mu_B * (B_x * kr(sx, s0) + B_y * kr(sy, s0) + B_z * kr(sz, s0)) +
-           Delta * kr(s0, sx))
+def discretized_hamiltonian(a, as_lead=False):
+    ham = ("(0.5 * hbar**2 * (k_x**2 + k_y**2 + k_z**2) / m_eff * c - mu + V) * kron(sigma_0, sigma_z) + "
+           "alpha * (k_y * kron(sigma_x, sigma_z) - k_x * kron(sigma_y, sigma_z)) + "
+           "0.5 * g * mu_B * (B_x * kron(sigma_x, sigma_0) + B_y * kron(sigma_y, sigma_0) + B_z * kron(sigma_z, sigma_0)) + "
+           "Delta * kron(sigma_0, sigma_x)")
 
-    if lead:
-        mu = mu_lead
+    lead = {'mu': 'mu_lead'} if as_lead else {}
 
-    args = dict(grid_spacing=a)
-    subs_sm = [(Delta, 0), (V_barrier, 0)]
-    subs_sc = [(g, 0), (alpha, 0), (V_barrier, 0)]
-    subs_interface = [(c, c * c_tunnel), (alpha, 0), (V_barrier, 0)]
-    subs_barrier = [(Delta, 0)]
+    subst_sm = {'Delta': 0}.update(lead)
+    subst_sc = {'g': 0, 'alpha': 0}.update(lead)
+    subst_interface = {'c': 'c * c_tunnel', 'alpha': 0}.update(lead)
+    subst_barrier = {'V': 'V + V_barrier', 'Delta': 0}.update(lead)
 
-    templ_sm = discretize(ham.subs(subs_sm), **args)
-    templ_sc = discretize(ham.subs(subs_sc), **args)
-    templ_interface = discretize(ham.subs(subs_interface), **args)
-    templ_barrier = discretize(ham.subs(subs_barrier), **args)
+    templ_sm = discretize(ham, substitutions=subst_sm, grid_spacing=a)
+    templ_sc = discretize(ham, substitutions=subst_sc, grid_spacing=a)
+    templ_interface = discretize(ham, substitutions=subst_interface, grid_spacing=a)
+    templ_barrier = discretize(ham, substitutions=subst_barrier, grid_spacing=a)
+
     return templ_sm, templ_sc, templ_interface, templ_barrier
 
 
 def add_disorder_to_template(template):
+    # Only works with particle-hole + spin DOF or only spin.
+    template = deepcopy(template)  # Needed because kwant.Builder is mutable
+    s0 = np.eye(2, dtype=complex)
+    sz = np.array([[1, 0], [0, -1]], dtype=complex)
+    s0sz = np.kron(s0, sz)
+    norbs = lat_from_temp(template).norbs
+    mat = s0sz if norbs == 4 else s0
+
     def onsite_dis(site, disorder, salt):
-        s0 = np.eye(2)
-        sz = np.array([[1, 0], [0, 1]])
-        s0sz = np.kron(s0, sz)
-        spin = holes = True
-        mat = s0sz if spin and holes else s0 if spin else sz
-        mat = np.array(mat).astype(complex)
         return disorder * (uniform(repr(site), repr(salt)) - .5) * mat
 
     for site, onsite in template.site_value_pairs():
@@ -157,30 +152,38 @@ def add_disorder_to_template(template):
     return template
 
 
-def phase(site1, site2, B_x, B_y, B_z, orbital, e, hbar):
-    x, y, z = site1.tag
-    vec = site2.tag - site1.tag
-    lat = site1.family
-    a = np.max(lat.prim_vecs)  # lattice_contant
-    vector_potential = [B_y * z - B_z * y, 0, B_x * y]
-    vector_potential = vector_potential @ vec * a**2 * 1e-18 * e / hbar
-    phi = np.exp(-1j * vector_potential)
-    if orbital:
-        if lat.norbs == 2:  # No PH degrees of freedom
-            return phi
-        elif lat.norbs == 4:
-            return np.array([phi, phi.conj(), phi, phi.conj()],
-                            dtype='complex128')
-    else:  # No orbital phase
-        return 1
-
-
-def apply_peierls_to_template(template):
+def apply_peierls_to_template(template, xyz_offset=(0, 0, 0)):
     """Adds p.orbital argument to the hopping functions."""
+    template = deepcopy(template)  # Needed because kwant.Builder is mutable
+    x0, y0, z0 = xyz_offset
+    lat = lat_from_temp(template)
+    a = np.max(lat.prim_vecs)  # lattice_contant
+
+    def phase(site1, site2, B_x, B_y, B_z, orbital, e, hbar):
+        x, y, z = site1.tag
+        direction = np.array(site2.tag - site1.tag)
+        A = [B_y * (z - z0) - B_z * (y - y0), 0, B_x * (y - y0)]
+        A = np.dot(A, direction) * a**2 * 1e-18 * e / hbar
+        phi = np.exp(-1j * A)
+        if orbital:
+            if lat.norbs == 2:  # No PH degrees of freedom
+                return phi
+            elif lat.norbs == 4:
+                return np.array([phi, phi.conj(), phi, phi.conj()],
+                                dtype='complex128')
+        else:  # No orbital phase
+            return 1
+
     for (site1, site2), hop in template.hopping_value_pairs():
         template[site1, site2] = combine(hop, phase, operator.mul, 2)
     return template
 
+
+def get_offset(shape, start, lat):
+    a = np.max(lat.prim_vecs)
+    sc_coords = [site.pos for site in lat.shape(shape, start * a)()]
+    xyz_offset = np.mean(sc_coords, axis=0)
+    return xyz_offset
 
 # Shape functions
 
@@ -213,13 +216,19 @@ def square_sector(r_out, r_in=0, L=1, L0=0, phi=360, angle=0, a=10):
     r_out /= 2
     if r_in > 0:
         def shape(site):
-            x, y, z = site.pos
+            try:
+                x, y, z = site.pos
+            except AttributeError:
+                x, y, z = site
             shape_yz = -r_in <= y < r_in and r_in <= z < r_out
             return (shape_yz and L0 <= x < L) if L > 0 else shape_yz
         return shape, np.array([L / a - 1, 0, r_in / a + 1], dtype=int)
     else:
         def shape(site):
-            x, y, z = site.pos
+            try:
+                x, y, z = site.pos
+            except AttributeError:
+                x, y, z = site
             shape_yz = -r_out <= y < r_out and -r_out <= z < r_out
             return (shape_yz and L0 <= x < L) if L > 0 else shape_yz
         return shape, (int((L - a) / a), 0, 0)
@@ -255,7 +264,10 @@ def cylinder_sector(r_out, r_in=0, L=1, L0=0, phi=360, angle=0, a=10):
     r_out_sq, r_in_sq = r_out**2, r_in**2
 
     def shape(site):
-        x, y, z = site.pos
+        try:
+            x, y, z = site.pos
+        except AttributeError:
+            x, y, z = site
         n = (y + 1j * z) * np.exp(1j * angle)
         y, z = n.real, n.imag
         rsq = y**2 + z**2
@@ -331,9 +343,6 @@ def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
     >>> syst, hopping = make_3d_wire(**syst_params)
 
     """
-    templ_sm, templ_sc, templ_interface, templ_barrier = map(
-        apply_peierls_to_template, discretized_hamiltonian(a, lead=True))
-
     sz = np.array([[1, 0], [0, -1]])
     cons_law = np.kron(np.eye(2), -sz)
     syst = kwant.Builder(conservation_law=cons_law)
@@ -348,6 +357,16 @@ def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
     shape_normal = shape_function(r_out=r1, angle=angle, L=L, a=a)
     shape_barrier = shape_function(r_out=r1, angle=angle, L=a, a=a)
     shape_sc = shape_function(r_out=r2, r_in=r1, phi=phi, angle=angle, L0=a, L=L, a=a)
+
+    templ_sm, templ_sc, templ_interface, templ_barrier = discretized_hamiltonian(a)
+
+    lat = lat_from_temp(templ_sc)
+    xyz_offset = get_offset(shape_sc[0], shape_sc[1], lat)
+    templ_sc = apply_peierls_to_template(templ_sc, xyz_offset=xyz_offset)
+
+    templ_sm = apply_peierls_to_template(templ_sm)
+    templ_interface = apply_peierls_to_template(templ_interface)
+    templ_barrier = apply_peierls_to_template(templ_barrier)
 
     if onsite_disorder:
         templ_sm = add_disorder_to_template(templ_sm)
@@ -409,11 +428,6 @@ def make_lead(a, r1, r2, phi, angle, with_shell, shape):
     >>> syst, hopping = make_lead(**syst_params)
 
     """
-    templ_sm, templ_sc, templ_interface, templ_barrier = map(
-        apply_peierls_to_template, discretized_hamiltonian(a))
-
-    symmetry = kwant.TranslationalSymmetry((a, 0, 0))
-
     if shape == 'square':
         shape_function = square_sector
     elif shape == 'circle':
@@ -426,7 +440,18 @@ def make_lead(a, r1, r2, phi, angle, with_shell, shape):
 
     sz = np.array([[1, 0], [0, -1]])
     cons_law = np.kron(np.eye(2), -sz)
+    symmetry = kwant.TranslationalSymmetry((a, 0, 0))
     lead = kwant.Builder(symmetry, conservation_law=cons_law)
+
+    templ_sm, templ_sc, templ_interface, _ = discretized_hamiltonian(a, as_lead=True)
+
+    lat = lat_from_temp(templ_sc)
+    # Take only a slice of SC instead of the infinite shape_sc_lead
+    shape_sc = shape_function(r_out=r2, r_in=r1, phi=phi, angle=angle, L=a, a=a)
+    xyz_offset = get_offset(shape_sc[0], shape_sc[1], lat)
+    templ_sc = apply_peierls_to_template(templ_sc, xyz_offset=xyz_offset)
+    templ_sm = apply_peierls_to_template(templ_sm)
+    templ_interface = apply_peierls_to_template(templ_interface)
 
     lead.fill(templ_sm, *shape_normal_lead)
     if with_shell:
