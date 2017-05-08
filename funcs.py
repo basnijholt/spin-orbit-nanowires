@@ -1,3 +1,4 @@
+
 # 1. Standard library imports
 from copy import deepcopy
 from functools import lru_cache
@@ -107,59 +108,24 @@ def spherical_coords_vec(rs, thetas, phis, degrees=True, unique=True):
 
 # Hamiltonian and system definition
 
-# # def discretized_hamiltonian(a, as_lead=False):
-#     ham = ("(0.5 * hbar**2 * (k_x**2 + k_y**2 + k_z**2) / m_eff * c - mu + V) * kron(sigma_0, sigma_z) + "
-#            "alpha * (k_y * kron(sigma_x, sigma_z) - k_x * kron(sigma_y, sigma_z)) + "
-#            "0.5 * g * mu_B * (B_x * kron(sigma_x, sigma_0) + B_y * kron(sigma_y, sigma_0) + B_z * kron(sigma_z, sigma_0)) + "
-#            "Delta * kron(sigma_0, sigma_x)")
-
-#     lead = {'mu': 'mu_lead'} if as_lead else {}
-
-#     subst_sm = {'Delta': 0}.update(lead)
-#     subst_sc = {'g': 0, 'alpha': 0}.update(lead)
-#     subst_interface = {'c': 'c * c_tunnel', 'alpha': 0}.update(lead)
-#     subst_barrier = {'V': 'V + V_barrier', 'Delta': 0}.update(lead)
-
-#     templ_sm = discretize(ham, substitutions=subst_sm, grid_spacing=a)
-#     templ_sc = discretize(ham, substitutions=subst_sc, grid_spacing=a)
-#     templ_interface = discretize(ham, substitutions=subst_interface, grid_spacing=a)
-#     templ_barrier = discretize(ham, substitutions=subst_barrier, grid_spacing=a)
-
-#     return templ_sm, templ_sc, templ_interface, templ_barrier
-
-
 def discretized_hamiltonian(a, as_lead=False):
-    import sympy
-    from sympy.physics.quantum import TensorProduct as kr
-    sx, sy, sz = [sympy.physics.matrices.msigma(i) for i in range(1, 4)]
-    s0 = sympy.eye(2)
+    ham = ("(0.5 * hbar**2 * (k_x**2 + k_y**2 + k_z**2) / m_eff * c - mu + V) * kron(sigma_0, sigma_z) + "
+           "alpha * (k_y * kron(sigma_x, sigma_z) - k_x * kron(sigma_y, sigma_z)) + "
+           "0.5 * g * mu_B * (B_x * kron(sigma_x, sigma_0) + B_y * kron(sigma_y, sigma_0) + B_z * kron(sigma_z, sigma_0)) + "
+           "Delta * kron(sigma_0, sigma_x)")
 
-    k_x, k_y, k_z = kwant.continuum.momentum_operators
-    x, y, z = kwant.continuum.position_operators
-    B_x, B_y, B_z, Delta, mu, alpha, g, mu_B, hbar, V, V_barrier = sympy.symbols(
-        'B_x B_y B_z Delta mu alpha g mu_B hbar V V_barrier', real=True)
-    m_eff, mu_lead = sympy.symbols(
-        'm_eff, mu_lead', commutative=False)
-    c, c_tunnel = sympy.symbols('c, c_tunnel')  # c should be (1e18 / constants.meV) if in nm and meV
-    kin = (1 / 2) * hbar**2 * (k_x**2 + k_y**2 + k_z**2) / m_eff * c
-    ham = ((kin - mu + V + V_barrier) * kr(s0, sz) +
-           alpha * (k_y * kr(sx, sz) - k_x * kr(sy, sz)) +
-           0.5 * g * mu_B * (B_x * kr(sx, s0) + B_y * kr(sy, s0) + B_z * kr(sz, s0)) +
-           Delta * kr(s0, sx))
+    lead = {'mu': 'mu_lead'} if as_lead else {}
 
-    if as_lead:
-        mu = mu_lead
+    subst_sm = {'Delta': 0, **lead}
+    subst_sc = {'g': 0, 'alpha': 0, **lead}
+    subst_interface = {'c': 'c * c_tunnel', 'alpha': 0, **lead}
+    subst_barrier = {'V': 'V + V_barrier', 'Delta': 0, **lead}
 
-    args = dict(grid_spacing=a)
-    subs_sm = [(Delta, 0), (V_barrier, 0)]
-    subs_sc = [(g, 0), (alpha, 0), (V_barrier, 0)]
-    subs_interface = [(c, c * c_tunnel), (alpha, 0), (V_barrier, 0)]
-    subs_barrier = [(Delta, 0)]
+    templ_sm = discretize(ham, substitutions=subst_sm, grid_spacing=a)
+    templ_sc = discretize(ham, substitutions=subst_sc, grid_spacing=a)
+    templ_interface = discretize(ham, substitutions=subst_interface, grid_spacing=a)
+    templ_barrier = discretize(ham, substitutions=subst_barrier, grid_spacing=a)
 
-    templ_sm = discretize(ham.subs(subs_sm), **args)
-    templ_sc = discretize(ham.subs(subs_sc), **args)
-    templ_interface = discretize(ham.subs(subs_interface), **args)
-    templ_barrier = discretize(ham.subs(subs_barrier), **args)
     return templ_sm, templ_sc, templ_interface, templ_barrier
 
 
@@ -186,7 +152,7 @@ def apply_peierls_to_template(template, xyz_offset=(0, 0, 0)):
     """Adds p.orbital argument to the hopping functions."""
     template = deepcopy(template)  # Needed because kwant.Builder is mutable
     x0, y0, z0 = xyz_offset
-    norbs = lat_from_temp(template).norbs
+    lat = lat_from_temp(template)
     a = np.max(lat.prim_vecs)  # lattice_contant
 
     def phase(site1, site2, B_x, B_y, B_z, orbital, e, hbar):
@@ -196,9 +162,9 @@ def apply_peierls_to_template(template, xyz_offset=(0, 0, 0)):
         A = np.dot(A, direction) * a**2 * 1e-18 * e / hbar
         phi = np.exp(-1j * A)
         if orbital:
-            if norbs == 2:  # No PH degrees of freedom
+            if lat.norbs == 2:  # No PH degrees of freedom
                 return phi
-            elif norbs == 4:
+            elif lat.norbs == 4:
                 return np.array([phi, phi.conj(), phi, phi.conj()],
                                 dtype='complex128')
         else:  # No orbital phase
