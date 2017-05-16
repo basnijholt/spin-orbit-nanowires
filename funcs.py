@@ -27,8 +27,8 @@ constants = SimpleNamespace(
     m_e=scipy.constants.m_e,
     eV=scipy.constants.eV,
     e=scipy.constants.e,
-    c=1e18 / (scipy.constants.eV * 1e-3),
-    mu_B=scipy.constants.physical_constants['Bohr magneton in eV/T'][0] * 1e3)  # to get to meV * nm^2
+    c=1e18 / (scipy.constants.eV * 1e-3),  # to get to meV * nm^2
+    mu_B=scipy.constants.physical_constants['Bohr magneton in eV/T'][0] * 1e3)
 
 constants.t = (constants.hbar ** 2 / (2 * constants.m_eff)) * constants.c
 
@@ -50,12 +50,6 @@ def named_product(**items):
     names = items.keys()
     vals = items.values()
     return [dict(zip(names, res)) for res in product(*vals)]
-
-
-def unique_rows(coor):
-    coor_tuple = [tuple(x) for x in coor]
-    unique_coor = sorted(set(coor_tuple), key=lambda x: coor_tuple.index(x))
-    return np.array(unique_coor)
 
 
 def lat_from_temp(template):
@@ -84,7 +78,7 @@ def spherical_coords(r, theta, phi, degrees=True):
     return np.array([x, y, z]).T
 
 
-def spherical_coords_vec(rs, thetas, phis, degrees=True, unique=True):
+def spherical_coords_vec(rs, thetas, phis, degrees=True):
     """Spherical coordinates to Cartesian, combinations of the arguments.
 
     Parameters
@@ -93,17 +87,12 @@ def spherical_coords_vec(rs, thetas, phis, degrees=True, unique=True):
         radial distance, polar angle θ, azimuthal angle φ.
     degrees : bool
         Degrees when True, radians when False.
-    unique : bool
-        Only return the unique combinations of coordinates. Useful e.g.
-        when theta=0 or to avoid double values.
     """
     rs = np.reshape(rs, (-1, 1, 1))
     thetas = np.reshape(thetas, (1, -1, 1))
     phis = np.reshape(phis, (1, 1, -1))
     vec = spherical_coords(rs, thetas, phis, degrees).reshape(-1, 3)
-    if unique:
-        vec = unique_rows(vec)
-    return vec
+    return vec.round(15)
 
 
 # Hamiltonian and system definition
@@ -121,10 +110,10 @@ def discretized_hamiltonian(a, as_lead=False):
     subst_interface = {'c': 'c * c_tunnel', 'alpha': 0, **lead}
     subst_barrier = {'V': 'V + V_barrier', 'Delta': 0, **lead}
 
-    templ_sm = discretize(ham, substitutions=subst_sm, grid_spacing=a)
-    templ_sc = discretize(ham, substitutions=subst_sc, grid_spacing=a)
-    templ_interface = discretize(ham, substitutions=subst_interface, grid_spacing=a)
-    templ_barrier = discretize(ham, substitutions=subst_barrier, grid_spacing=a)
+    templ_sm = discretize(ham, locals=subst_sm, grid_spacing=a)
+    templ_sc = discretize(ham, locals=subst_sc, grid_spacing=a)
+    templ_interface = discretize(ham, locals=subst_interface, grid_spacing=a)
+    templ_barrier = discretize(ham, locals=subst_barrier, grid_spacing=a)
 
     return templ_sm, templ_sc, templ_interface, templ_barrier
 
@@ -138,12 +127,12 @@ def add_disorder_to_template(template):
     norbs = lat_from_temp(template).norbs
     mat = s0sz if norbs == 4 else s0
 
-    def onsite_dis(site, disorder, salt):
+    def onsite_disorder(site, disorder, salt):
         return disorder * (uniform(repr(site), repr(salt)) - .5) * mat
 
     for site, onsite in template.site_value_pairs():
         onsite = template[site]
-        template[site] = combine(onsite, onsite_dis, operator.add, 1)
+        template[site] = combine(onsite, onsite_disorder, operator.add, 1)
 
     return template
 
@@ -153,7 +142,7 @@ def apply_peierls_to_template(template, xyz_offset=(0, 0, 0)):
     template = deepcopy(template)  # Needed because kwant.Builder is mutable
     x0, y0, z0 = xyz_offset
     lat = lat_from_temp(template)
-    a = np.max(lat.prim_vecs)  # lattice_contant
+    a = np.max(lat.prim_vecs)  # lattice contant
 
     def phase(site1, site2, B_x, B_y, B_z, orbital, e, hbar):
         x, y, z = site1.tag
@@ -177,7 +166,7 @@ def apply_peierls_to_template(template, xyz_offset=(0, 0, 0)):
 
 def get_offset(shape, start, lat):
     a = np.max(lat.prim_vecs)
-    sc_coords = [site.pos for site in lat.shape(shape, start * a)()]
+    sc_coords = [site.pos for site in lat.shape(shape, start)()]
     xyz_offset = np.mean(sc_coords, axis=0)
     return xyz_offset
 
@@ -275,7 +264,7 @@ def cylinder_sector(r_out, r_in=0, L=1, L0=0, phi=360, angle=0, a=10):
                              r_mid * np.sin(angle),
                              r_mid * np.cos(angle)])
 
-    return shape, np.round(start_coords / a).astype(int)
+    return shape, start_coords
 
 
 def at_interface(site1, site2, shape1, shape2):
@@ -292,7 +281,7 @@ def change_hopping_at_interface(syst, template, shape1, shape2):
 
 # System construction
 
-@lru_cache()
+@lru_cache(maxsize=None)
 def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
                  with_leads, with_shell, shape):
     """Create a cylindrical 3D wire covered with a
@@ -386,7 +375,7 @@ def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
     return syst.finalized()
 
 
-@lru_cache()
+@lru_cache(maxsize=None)
 def make_lead(a, r1, r2, phi, angle, with_shell, shape):
     """Create an infinite cylindrical 3D wire partially covered with a
     superconducting (SC) shell.
@@ -461,9 +450,9 @@ def make_lead(a, r1, r2, phi, angle, with_shell, shape):
 
 
 # Physics functions
-
+@lru_cache(maxsize=None)
 def andreev_conductance(syst, params, E=100e-3, verbose=False):
-    """Conductance is N - R_ee + R_he"""
+    """The Andreev conductance is N - R_ee + R_he."""
     smatrix = kwant.smatrix(syst, energy=E, params=params)
     r_ee = smatrix.transmission((0, 0), (0, 0))
     r_eh = smatrix.transmission((0, 0), (0, 1))
@@ -494,7 +483,7 @@ def bands(lead, params, ks=None):
 
 
 def translation_ev(h, t, tol=1e6):
-    """Compute the eigen values of the translation operator of a lead.
+    """Compute the eigenvalues of the translation operator of a lead.
 
     Adapted from kwant.physics.leads.modes.
 
@@ -552,6 +541,7 @@ def gap_minimizer(lead, params, energy):
     return np.min(np.abs(norm - 1))
 
 
+@lru_cache(maxsize=None)
 def find_gap(lead, params, tol=1e-6):
     """Finds the gapsize by peforming a binary search of the modes with a
     tolarance of tol.
