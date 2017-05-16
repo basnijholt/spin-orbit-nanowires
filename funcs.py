@@ -346,7 +346,7 @@ def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
     templ_sm, templ_sc, templ_interface, templ_barrier = discretized_hamiltonian(a)
 
     lat = lat_from_temp(templ_sc)
-    xyz_offset = get_offset(shape_sc[0], shape_sc[1], lat)
+    xyz_offset = get_offset(shape=shape_sc[0], start=shape_sc[1], lat=lat)
     templ_sc = apply_peierls_to_template(templ_sc, xyz_offset=xyz_offset)
 
     templ_sm = apply_peierls_to_template(templ_sm)
