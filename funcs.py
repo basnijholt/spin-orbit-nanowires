@@ -1,10 +1,7 @@
 
 # 1. Standard library imports
 from copy import deepcopy
-from functools import lru_cache
 import operator
-from itertools import product
-import subprocess
 from types import SimpleNamespace
 
 # 2. External package imports
@@ -17,7 +14,7 @@ import scipy.constants
 
 # 3. Internal imports
 from combine import combine
-
+from common import *
 
 # Parameters taken from arXiv:1204.2792
 # All constant parameters, mostly fundamental constants, in a SimpleNamespace.
@@ -33,70 +30,8 @@ constants = SimpleNamespace(
 constants.t = (constants.hbar ** 2 / (2 * constants.m_eff)) * constants.c
 
 
-# General functions
-
-def get_git_revision_hash():
-    """Get the git hash to save with data to ensure reproducibility."""
-    git_output = subprocess.check_output(['git', 'rev-parse', 'HEAD'])
-    return git_output.decode("utf-8").replace('\n', '')
-
-
-def drop_constant_columns(df):
-    """Taken from http://stackoverflow.com/a/20210048/3447047."""
-    return df.loc[:, (df != df.ix[0]).any()]
-
-
-def named_product(**items):
-    names = items.keys()
-    vals = items.values()
-    return [dict(zip(names, res)) for res in product(*vals)]
-
-
-def lat_from_temp(template):
-    return next(iter(template.sites())).family
-
-
-def spherical_coords(r, theta, phi, degrees=True):
-    """Transform spherical coordinates to Cartesian.
-
-    Parameters
-    ----------
-    r, theta, phi : float or array
-        radial distance, polar angle θ, azimuthal angle φ.
-    degrees : bool
-        Degrees when True, radians when False.
-    """
-    r, theta, phi = [np.reshape(x, -1) if np.isscalar(x)
-                     else x for x in (r, theta, phi)]
-
-    if degrees:
-        theta, phi = map(np.deg2rad, (theta, phi))
-
-    x = r * np.sin(theta) * np.cos(phi)
-    y = r * np.sin(theta) * np.sin(phi)
-    z = r * np.cos(theta) + 0 * phi
-    return np.array([x, y, z]).T
-
-
-def spherical_coords_vec(rs, thetas, phis, degrees=True):
-    """Spherical coordinates to Cartesian, combinations of the arguments.
-
-    Parameters
-    ----------
-    rs, thetas, phis : numpy array
-        radial distance, polar angle θ, azimuthal angle φ.
-    degrees : bool
-        Degrees when True, radians when False.
-    """
-    rs = np.reshape(rs, (-1, 1, 1))
-    thetas = np.reshape(thetas, (1, -1, 1))
-    phis = np.reshape(phis, (1, 1, -1))
-    vec = spherical_coords(rs, thetas, phis, degrees).reshape(-1, 3)
-    return vec.round(15)
-
-
 # Hamiltonian and system definition
-
+@memoize
 def discretized_hamiltonian(a, as_lead=False):
     ham = ("(0.5 * hbar**2 * (k_x**2 + k_y**2 + k_z**2) / m_eff * c - mu + V) * kron(sigma_0, sigma_z) + "
            "alpha * (k_y * kron(sigma_x, sigma_z) - k_x * kron(sigma_y, sigma_z)) + "
@@ -124,7 +59,7 @@ def add_disorder_to_template(template):
     s0 = np.eye(2, dtype=complex)
     sz = np.array([[1, 0], [0, -1]], dtype=complex)
     s0sz = np.kron(s0, sz)
-    norbs = lat_from_temp(template).norbs
+    norbs = template.lattice.norbs
     mat = s0sz if norbs == 4 else s0
 
     def onsite_disorder(site, disorder, salt):
@@ -141,7 +76,7 @@ def apply_peierls_to_template(template, xyz_offset=(0, 0, 0)):
     """Adds p.orbital argument to the hopping functions."""
     template = deepcopy(template)  # Needed because kwant.Builder is mutable
     x0, y0, z0 = xyz_offset
-    lat = lat_from_temp(template)
+    lat = template.lattice
     a = np.max(lat.prim_vecs)  # lattice contant
 
     def phase(site1, site2, B_x, B_y, B_z, orbital, e, hbar):
@@ -281,7 +216,7 @@ def change_hopping_at_interface(syst, template, shape1, shape2):
 
 # System construction
 
-@lru_cache(maxsize=None)
+@memoize
 def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
                  with_leads, with_shell, shape):
     """Create a cylindrical 3D wire covered with a
@@ -339,13 +274,13 @@ def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
     else:
         raise(NotImplementedError('Only square or circle wire cross section allowed'))
 
-    shape_normal = shape_function(r_out=r1, angle=angle, L=L, a=a)
+    shape_normal = shape_function(r_out=r1, angle=angle, L0=a, L=L, a=a)
     shape_barrier = shape_function(r_out=r1, angle=angle, L=a, a=a)
     shape_sc = shape_function(r_out=r2, r_in=r1, phi=phi, angle=angle, L0=a, L=L, a=a)
 
     templ_sm, templ_sc, templ_interface, templ_barrier = discretized_hamiltonian(a)
 
-    lat = lat_from_temp(templ_sc)
+    lat = templ_sc.lattice
     xyz_offset = get_offset(shape=shape_sc[0], start=shape_sc[1], lat=lat)
     templ_sc = apply_peierls_to_template(templ_sc, xyz_offset=xyz_offset)
 
@@ -357,7 +292,7 @@ def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
         templ_sm = add_disorder_to_template(templ_sm)
 
     syst.fill(templ_sm, *shape_normal)
-    syst.fill(templ_barrier, *shape_barrier, overwrite=True)
+    syst.fill(templ_barrier, *shape_barrier)
 
     if with_shell:
         syst.fill(templ_sc, *shape_sc)
@@ -375,7 +310,7 @@ def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
     return syst.finalized()
 
 
-@lru_cache(maxsize=None)
+@memoize
 def make_lead(a, r1, r2, phi, angle, with_shell, shape):
     """Create an infinite cylindrical 3D wire partially covered with a
     superconducting (SC) shell.
@@ -430,7 +365,7 @@ def make_lead(a, r1, r2, phi, angle, with_shell, shape):
 
     templ_sm, templ_sc, templ_interface, _ = discretized_hamiltonian(a, as_lead=True)
 
-    lat = lat_from_temp(templ_sc)
+    lat = templ_sc.lattice
     # Take only a slice of SC instead of the infinite shape_sc_lead
     shape_sc = shape_function(r_out=r2, r_in=r1, phi=phi, angle=angle, L=a, a=a)
     xyz_offset = get_offset(shape_sc[0], shape_sc[1], lat)
@@ -450,7 +385,7 @@ def make_lead(a, r1, r2, phi, angle, with_shell, shape):
 
 
 # Physics functions
-@lru_cache(maxsize=None)
+@memoize
 def andreev_conductance(syst, params, E=100e-3, verbose=False):
     """The Andreev conductance is N - R_ee + R_he."""
     smatrix = kwant.smatrix(syst, energy=E, params=params)
@@ -516,6 +451,7 @@ def cell_mats(lead, params, bias=0):
     return h, t
 
 
+@memoize
 def gap_minimizer(lead, params, energy):
     """Function that minimizes a function to find the band gap.
     This objective function checks if there are progagating modes at a
@@ -541,7 +477,7 @@ def gap_minimizer(lead, params, energy):
     return np.min(np.abs(norm - 1))
 
 
-@lru_cache(maxsize=None)
+@memoize
 def find_gap(lead, params, tol=1e-6):
     """Finds the gapsize by peforming a binary search of the modes with a
     tolarance of tol.
