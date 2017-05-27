@@ -184,7 +184,13 @@ def spherical_coords(r, theta, phi, degrees=True):
     x = r * np.sin(theta) * np.cos(phi)
     y = r * np.sin(theta) * np.sin(phi)
     z = r * np.cos(theta) + 0 * phi
-    return np.array([x, y, z]).T
+    xyz = np.array([x, y, z]).T
+    xyz = xyz.round(15)
+
+    if xyz.shape == (1, 3):
+        xyz = xyz.reshape(-1).tolist()
+
+    return xyz
 
 
 def cartesian_coords(x, y, z, degree=True):
@@ -218,4 +224,4 @@ def spherical_coords_vec(rs, thetas, phis, degrees=True, unique=False):
     vec = spherical_coords(rs, thetas, phis, degrees).reshape(-1, 3)
     if unique:
         vec = unique_rows(vec)
-    return vec.round(15)
+    return vec
