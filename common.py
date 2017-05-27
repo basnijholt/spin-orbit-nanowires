@@ -72,6 +72,7 @@ def hashable(v):
 def drop_constant_columns(df):
     """Taken from http://stackoverflow.com/a/20210048/3447047"""
     df = remove_unhashable_columns(df)
+    df = df.reset_index(drop=True)
     return df.loc[:, (df != df.ix[0]).any()]
 
 

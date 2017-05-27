@@ -39,14 +39,14 @@ syst_pars = dict(a=10, onsite_disorder=False,
 def cond(val, syst_pars=syst_pars, params=params):
     import funcs
     val['B_x'], val['B_y'], val['B_z'] = val.pop('B')
+    val['mu_lead'] = val['mu']
     params = dict(**params, **val)
-    params['mu_lead'] = val['mu']
-    
+
     for x in ['angle']:
         syst_pars[x] = params.pop(x)
 
     syst = funcs.make_3d_wire(**syst_pars)
-    return dict(**funcs.andreev_conductance(syst, params, E=val['V_bias']), **params)
+    return dict(**funcs.andreev_conductance(syst, params, E=val['V_bias']), **val)
 
 
 Bs = funcs.spherical_coords_vec(rs=np.linspace(0, 2, 51),
@@ -72,6 +72,6 @@ for i, chunk in enumerate(partition_all(200000, vals)):
 
         df = pd.DataFrame(G)
 
-        df = df.assign(**syst_pars)
+        df = df.assign(**syst_pars).assign(**params)
         df = df.assign(git_hash=funcs.get_git_revision_hash())
         df.to_hdf(fname, 'all_data', mode='w')
