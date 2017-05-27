@@ -2,11 +2,13 @@
 
 import collections
 import functools
+from glob import glob
 from itertools import product
 import subprocess
 
 import kwant
 import numpy as np
+import pandas as pd
 import scipy.sparse.linalg as sla
 from scipy.sparse import identity
 
@@ -19,6 +21,17 @@ def parse_params(params):
             except NameError:
                 pass
     return params
+
+
+def combine_dfs(pattern, fname=None):
+    files = glob(pattern)
+    df = pd.concat([pd.read_hdf(f) for f in sorted(files)])
+    df = df.reset_index(drop=True)
+
+    if fname is not None:
+        df.to_hdf(fname, 'all_data', mode='w', complib='zlib', complevel=9)
+
+    return df
 
 
 def lat_from_syst(syst):
