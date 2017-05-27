@@ -33,7 +33,7 @@ constants.t = (constants.hbar ** 2 / (2 * constants.m_eff)) * constants.c
 # Hamiltonian and system definition
 @memoize
 def discretized_hamiltonian(a, as_lead=False):
-    ham = ("(0.5 * hbar**2 * (k_x**2 + k_y**2 + k_z**2) / m_eff * c - mu + V) * kron(sigma_0, sigma_z) + "
+    ham = ("(0.5 * hbar**2 * (k_x**2 + k_y**2 + k_z**2) / m_eff * c - mu + V(x)) * kron(sigma_0, sigma_z) + "
            "alpha * (k_y * kron(sigma_x, sigma_z) - k_x * kron(sigma_y, sigma_z)) + "
            "0.5 * g * mu_B * (B_x * kron(sigma_x, sigma_0) + B_y * kron(sigma_y, sigma_0) + B_z * kron(sigma_z, sigma_0)) + "
            "Delta * kron(sigma_0, sigma_x)")
@@ -43,7 +43,7 @@ def discretized_hamiltonian(a, as_lead=False):
     subst_sm = {'Delta': 0, **lead}
     subst_sc = {'g': 0, 'alpha': 0, **lead}
     subst_interface = {'c': 'c * c_tunnel', 'alpha': 0, **lead}
-    subst_barrier = {'V': 'V + V_barrier', 'Delta': 0, **lead}
+    subst_barrier = {'mu': 'mu - V_barrier', 'Delta': 0, **lead}
 
     templ_sm = discretize(ham, locals=subst_sm, grid_spacing=a)
     templ_sc = discretize(ham, locals=subst_sc, grid_spacing=a)
@@ -218,7 +218,7 @@ def change_hopping_at_interface(syst, template, shape1, shape2):
 
 @memoize
 def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
-                 with_leads, with_shell, shape):
+                 with_leads, with_shell, shape, A_correction):
     """Create a cylindrical 3D wire covered with a
     superconducting (SC) shell, but without superconductor in
     leads.
@@ -281,7 +281,12 @@ def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
     templ_sm, templ_sc, templ_interface, templ_barrier = discretized_hamiltonian(a)
 
     lat = templ_sc.lattice
-    xyz_offset = get_offset(shape=shape_sc[0], start=shape_sc[1], lat=lat)
+
+    if A_correction:
+        xyz_offset = get_offset(shape=shape_sc[0], start=shape_sc[1], lat=lat)
+    else:
+        xyz_offset = (0, 0, 0)
+
     templ_sc = apply_peierls_to_template(templ_sc, xyz_offset=xyz_offset)
 
     templ_sm = apply_peierls_to_template(templ_sm)
@@ -302,16 +307,17 @@ def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
                                            shape_normal, shape_sc)
 
     if with_leads:
-        lead = make_lead(a, r1, r2, phi, angle, with_shell=False, shape=shape)
+        lead = make_lead(a, r1, r2, phi, angle, A_correction, with_shell=False, shape=shape)
         # The lead at the side of the tunnel barrier.
         syst.attach_lead(lead.reversed())
         # The second lead on the other side.
         syst.attach_lead(lead)
+
     return syst.finalized()
 
 
 @memoize
-def make_lead(a, r1, r2, phi, angle, with_shell, shape):
+def make_lead(a, r1, r2, phi, angle, A_correction, with_shell, shape):
     """Create an infinite cylindrical 3D wire partially covered with a
     superconducting (SC) shell.
 
@@ -344,7 +350,7 @@ def make_lead(a, r1, r2, phi, angle, with_shell, shape):
     to a file. So I create a dictionary that is passed to the function.
 
     >>> syst_params = dict(a=10, angle=0, phi=185, r1=50,
-    ...                    r2=70, shape='square', with_shell=True)
+    ...                    r2=70, A_correction=True, shape='square', with_shell=True)
     >>> syst, hopping = make_lead(**syst_params)
 
     """
@@ -368,7 +374,12 @@ def make_lead(a, r1, r2, phi, angle, with_shell, shape):
     lat = templ_sc.lattice
     # Take only a slice of SC instead of the infinite shape_sc_lead
     shape_sc = shape_function(r_out=r2, r_in=r1, phi=phi, angle=angle, L=a, a=a)
-    xyz_offset = get_offset(shape_sc[0], shape_sc[1], lat)
+
+    if A_correction:
+        xyz_offset = get_offset(shape_sc[0], shape_sc[1], lat)
+    else:
+        xyz_offset = (0, 0, 0)
+
     templ_sc = apply_peierls_to_template(templ_sc, xyz_offset=xyz_offset)
     templ_sm = apply_peierls_to_template(templ_sm)
     templ_interface = apply_peierls_to_template(templ_interface)
