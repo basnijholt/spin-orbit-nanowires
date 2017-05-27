@@ -33,7 +33,7 @@ constants.t = (constants.hbar ** 2 / (2 * constants.m_eff)) * constants.c
 # Hamiltonian and system definition
 @memoize
 def discretized_hamiltonian(a, as_lead=False):
-    ham = ("(0.5 * hbar**2 * (k_x**2 + k_y**2 + k_z**2) / m_eff * c - mu + V(x)) * kron(sigma_0, sigma_z) + "
+    ham = ("(0.5 * hbar**2 * (k_x**2 + k_y**2 + k_z**2) / m_eff * c - mu + V(x, y, z)) * kron(sigma_0, sigma_z) + "
            "alpha * (k_y * kron(sigma_x, sigma_z) - k_x * kron(sigma_y, sigma_z)) + "
            "0.5 * g * mu_B * (B_x * kron(sigma_x, sigma_0) + B_y * kron(sigma_y, sigma_0) + B_z * kron(sigma_z, sigma_0)) + "
            "Delta * kron(sigma_0, sigma_x)")

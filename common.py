@@ -7,6 +7,18 @@ import subprocess
 
 import kwant
 import numpy as np
+import scipy.sparse.linalg as sla
+from scipy.sparse import identity
+
+
+def parse_params(params):
+    for k, v in params.items():
+        if isinstance(v, str):
+            try:
+                params[k] = eval(v)
+            except NameError:
+                pass
+    return params
 
 
 def lat_from_syst(syst):
@@ -14,12 +26,6 @@ def lat_from_syst(syst):
     if len(lats) > 1:
         raise Exception('No unique lattice in the system.')
     return list(lats)[0]
-
-
-def unique_rows(coor):
-    coor_tuple = [tuple(x) for x in coor]
-    unique_coor = sorted(set(coor_tuple), key=lambda x: coor_tuple.index(x))
-    return np.asarray(unique_coor)
 
 
 def memoize(obj):
@@ -151,6 +157,12 @@ def sort_eigvals(eigvals, eigvecs):
             row[:, swap_i], row[:, swap_j] = B, A
 
     return eigvals_sorted
+
+
+def unique_rows(coor):
+    coor_tuple = [tuple(x) for x in coor]
+    unique_coor = sorted(set(coor_tuple), key=lambda x: coor_tuple.index(x))
+    return np.asarray(unique_coor)
 
 
 def spherical_coords(r, theta, phi, degrees=True):
