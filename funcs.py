@@ -82,7 +82,6 @@ def apply_peierls_to_template(template, xyz_offset=(0, 0, 0)):
     def phase(site1, site2, B_x, B_y, B_z, orbital, e, hbar):
         x, y, z = site1.tag
         direction = site2.tag - site1.tag
-        print(x0, y0, z0)
         A = [B_y * (z - z0) - B_z * (y - y0), 0, B_x * (y - y0)]
         A = np.dot(A, direction) * a**2 * 1e-18 * e / hbar
         phase = np.exp(-1j * A)
@@ -260,8 +259,8 @@ def make_3d_wire(a, L, r1, r2, coverage_angle, angle, onsite_disorder,
     to a file. So I create a dictionary that is passed to the function.
 
     >>> syst_params = dict(a=10, angle=0, site_disorder=False,
-    ...                    L=30, coverage_angle=185, r1=50, r2=70, shape='square',
-    ...                    with_leads=True, with_shell=True)
+    ...                    L=30, coverage_angle=135, r1=50, r2=70,
+                           shape='square', with_leads=True, with_shell=True)
     >>> syst, hopping = make_3d_wire(**syst_params)
 
     """
@@ -274,7 +273,8 @@ def make_3d_wire(a, L, r1, r2, coverage_angle, angle, onsite_disorder,
     elif shape == 'circle':
         shape_function = cylinder_sector
     else:
-        raise(NotImplementedError('Only square or circle wire cross section allowed'))
+        raise(NotImplementedError('Only square or circle wire cross'
+                                  'section allowed'))
 
     shape_normal = shape_function(r_out=r1, angle=angle, L0=a, L=L, a=a)
     shape_barrier = shape_function(r_out=r1, angle=angle, L=a, a=a)
@@ -283,17 +283,7 @@ def make_3d_wire(a, L, r1, r2, coverage_angle, angle, onsite_disorder,
 
     templ_sm, templ_sc, templ_interface, templ_barrier = discretized_hamiltonian(a)
 
-    lat = templ_sc.lattice
-
-    if A_correction:
-        xyz_offset = get_offset(*shape_sc, lat=lat)
-    else:
-        xyz_offset = (0, 0, 0)
-
-    templ_sc = apply_peierls_to_template(templ_sc, xyz_offset=xyz_offset)
-
     templ_sm = apply_peierls_to_template(templ_sm)
-    templ_interface = apply_peierls_to_template(templ_interface)
     templ_barrier = apply_peierls_to_template(templ_barrier)
 
     if onsite_disorder:
@@ -303,14 +293,24 @@ def make_3d_wire(a, L, r1, r2, coverage_angle, angle, onsite_disorder,
     syst.fill(templ_barrier, *shape_barrier)
 
     if with_shell:
+
+        if A_correction:
+            lat = templ_sc.lattice
+            xyz_offset = get_offset(*shape_sc, lat=lat)
+        else:
+            xyz_offset = (0, 0, 0)
+
+        templ_sc = apply_peierls_to_template(templ_sc, xyz_offset=xyz_offset)
         syst.fill(templ_sc, *shape_sc)
 
         # Adding a tunnel barrier between SM and SC
+        templ_interface = apply_peierls_to_template(templ_interface)
         syst = change_hopping_at_interface(syst, templ_interface,
                                            shape_normal, shape_sc)
 
     if with_leads:
-        lead = make_lead(a, r1, r2, coverage_angle, angle, False, with_shell=False, shape=shape)
+        lead = make_lead(a, r1, r2, coverage_angle, angle, A_correction=False,
+                         with_shell=False, shape=shape)
         # The lead at the side of the tunnel barrier.
         syst.attach_lead(lead.reversed())
         # The second lead on the other side.
