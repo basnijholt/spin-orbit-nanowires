@@ -198,12 +198,7 @@ def spherical_coords(r, theta, phi, degrees=True):
     y = r * np.sin(theta) * np.sin(phi)
     z = r * np.cos(theta) + 0 * phi
     xyz = np.array([x, y, z]).T
-    xyz = xyz.round(15)
-
-    if xyz.shape == (1, 3):
-        xyz = xyz.reshape(-1).tolist()
-
-    return xyz
+    return xyz.round(15).squeeze()
 
 
 def cartesian_coords(x, y, z, degree=True):
