@@ -66,7 +66,7 @@ vals = funcs.named_product(B=np.linspace(0, 2, 51),
                            angle=[0],
                            A_correction=[True, False])
 
-vals = [val for val in vals if (not (val['theta'] == 0 and val['phi'] != 0)) or
+vals = [val for val in vals if (not (val['theta'] == 0 and val['phi'] != 0)) and
                                (not (val['g'] == 0 and val['orbital'] == False))]
 
 print(len(vals))
