@@ -82,14 +82,15 @@ def apply_peierls_to_template(template, xyz_offset=(0, 0, 0)):
     def phase(site1, site2, B_x, B_y, B_z, orbital, e, hbar):
         x, y, z = site1.tag
         direction = site2.tag - site1.tag
+        print(x0, y0, z0)
         A = [B_y * (z - z0) - B_z * (y - y0), 0, B_x * (y - y0)]
         A = np.dot(A, direction) * a**2 * 1e-18 * e / hbar
-        phi = np.exp(-1j * A)
+        phase = np.exp(-1j * A)
         if orbital:
             if lat.norbs == 2:  # No PH degrees of freedom
-                return phi
+                return phase
             elif lat.norbs == 4:
-                return np.array([phi, phi.conj(), phi, phi.conj()],
+                return np.array([phase, phase.conj(), phase, phase.conj()],
                                 dtype='complex128')
         else:  # No orbital phase
             return 1
@@ -107,7 +108,7 @@ def get_offset(shape, start, lat):
 
 # Shape functions
 
-def square_sector(r_out, r_in=0, L=1, L0=0, phi=360, angle=0, a=10):
+def square_sector(r_out, r_in=0, L=1, L0=0, coverage_angle=360, angle=0, a=10):
     """Returns the shape function and start coords of a wire
     with a square cross section, for -r_out <= x, y < r_out.
 
@@ -121,7 +122,7 @@ def square_sector(r_out, r_in=0, L=1, L0=0, phi=360, angle=0, a=10):
         Length of wire from L0 in nm, -1 if infinite in x-direction.
     L0 : int
         Start position in x.
-    phi : ignored
+    coverage_angle : ignored
         Ignored variable, to have same arguments as cylinder_sector.
     angle : ignored
         Ignored variable, to have same arguments as cylinder_sector.
@@ -154,7 +155,7 @@ def square_sector(r_out, r_in=0, L=1, L0=0, phi=360, angle=0, a=10):
         return shape, (int((L - a) / a), 0, 0)
 
 
-def cylinder_sector(r_out, r_in=0, L=1, L0=0, phi=360, angle=0, a=10):
+def cylinder_sector(r_out, r_in=0, L=1, L0=0, coverage_angle=360, angle=0, a=10):
     """Returns the shape function and start coords for a wire with
     as cylindrical cross section.
 
@@ -168,7 +169,7 @@ def cylinder_sector(r_out, r_in=0, L=1, L0=0, phi=360, angle=0, a=10):
         Length of wire from L0 in nm, -1 if infinite in x-direction.
     L0 : int, optional
         Start position in x.
-    phi : int, optional
+    coverage_angle : int, optional
         Coverage angle in degrees.
     angle : int, optional
         Angle of tilting from top in degrees.
@@ -179,7 +180,7 @@ def cylinder_sector(r_out, r_in=0, L=1, L0=0, phi=360, angle=0, a=10):
     -------
     (shape_func, *(start_coords))
     """
-    phi *= np.pi / 360
+    coverage_angle *= np.pi / 360
     angle *= np.pi / 180
     r_out_sq, r_in_sq = r_out**2, r_in**2
 
@@ -191,7 +192,8 @@ def cylinder_sector(r_out, r_in=0, L=1, L0=0, phi=360, angle=0, a=10):
         n = (y + 1j * z) * np.exp(1j * angle)
         y, z = n.real, n.imag
         rsq = y**2 + z**2
-        shape_yz = r_in_sq <= rsq < r_out_sq and z >= np.cos(phi) * np.sqrt(rsq)
+        shape_yz = (r_in_sq <= rsq < r_out_sq and
+                    z >= np.cos(coverage_angle) * np.sqrt(rsq))
         return (shape_yz and L0 <= x < L) if L > 0 else shape_yz
 
     r_mid = (r_out + r_in) / 2
@@ -217,7 +219,7 @@ def change_hopping_at_interface(syst, template, shape1, shape2):
 # System construction
 
 @memoize
-def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
+def make_3d_wire(a, L, r1, r2, coverage_angle, angle, onsite_disorder,
                  with_leads, with_shell, shape, A_correction):
     """Create a cylindrical 3D wire covered with a
     superconducting (SC) shell, but without superconductor in
@@ -233,7 +235,7 @@ def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
         Radius of normal part of wire in nm.
     r2 : int
         Radius of superconductor in nm.
-    phi : int
+    coverage_angle : int
         Coverage angle of superconductor in degrees.
     angle : int
         Angle of tilting of superconductor from top in degrees.
@@ -258,7 +260,7 @@ def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
     to a file. So I create a dictionary that is passed to the function.
 
     >>> syst_params = dict(a=10, angle=0, site_disorder=False,
-    ...                    L=30, phi=185, r1=50, r2=70, shape='square',
+    ...                    L=30, coverage_angle=185, r1=50, r2=70, shape='square',
     ...                    with_leads=True, with_shell=True)
     >>> syst, hopping = make_3d_wire(**syst_params)
 
@@ -276,14 +278,15 @@ def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
 
     shape_normal = shape_function(r_out=r1, angle=angle, L0=a, L=L, a=a)
     shape_barrier = shape_function(r_out=r1, angle=angle, L=a, a=a)
-    shape_sc = shape_function(r_out=r2, r_in=r1, phi=phi, angle=angle, L0=a, L=L, a=a)
+    shape_sc = shape_function(r_out=r2, r_in=r1, coverage_angle=coverage_angle,
+                              angle=angle, L0=a, L=L, a=a)
 
     templ_sm, templ_sc, templ_interface, templ_barrier = discretized_hamiltonian(a)
 
     lat = templ_sc.lattice
 
     if A_correction:
-        xyz_offset = get_offset(shape=shape_sc[0], start=shape_sc[1], lat=lat)
+        xyz_offset = get_offset(*shape_sc, lat=lat)
     else:
         xyz_offset = (0, 0, 0)
 
@@ -307,7 +310,7 @@ def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
                                            shape_normal, shape_sc)
 
     if with_leads:
-        lead = make_lead(a, r1, r2, phi, angle, A_correction, with_shell=False, shape=shape)
+        lead = make_lead(a, r1, r2, coverage_angle, angle, False, with_shell=False, shape=shape)
         # The lead at the side of the tunnel barrier.
         syst.attach_lead(lead.reversed())
         # The second lead on the other side.
@@ -317,7 +320,7 @@ def make_3d_wire(a, L, r1, r2, phi, angle, onsite_disorder,
 
 
 @memoize
-def make_lead(a, r1, r2, phi, angle, A_correction, with_shell, shape):
+def make_lead(a, r1, r2, coverage_angle, angle, A_correction, with_shell, shape):
     """Create an infinite cylindrical 3D wire partially covered with a
     superconducting (SC) shell.
 
@@ -329,7 +332,7 @@ def make_lead(a, r1, r2, phi, angle, A_correction, with_shell, shape):
         Radius of normal part of wire in nm.
     r2 : int
         Radius of superconductor in nm.
-    phi : int
+    coverage_angle : int
         Coverage angle of superconductor in degrees.
     angle : int
         Angle of tilting of superconductor from top in degrees.
@@ -349,7 +352,7 @@ def make_lead(a, r1, r2, phi, angle, A_correction, with_shell, shape):
     This doesn't use default parameters because the variables need to be saved,
     to a file. So I create a dictionary that is passed to the function.
 
-    >>> syst_params = dict(a=10, angle=0, phi=185, r1=50,
+    >>> syst_params = dict(a=10, angle=0, coverage_angle=185, r1=50,
     ...                    r2=70, A_correction=True, shape='square', with_shell=True)
     >>> syst, hopping = make_lead(**syst_params)
 
@@ -362,7 +365,7 @@ def make_lead(a, r1, r2, phi, angle, A_correction, with_shell, shape):
         raise NotImplementedError('Only square or circle wire cross section allowed')
 
     shape_normal_lead = shape_function(r_out=r1, angle=angle, L=-1, a=a)
-    shape_sc_lead = shape_function(r_out=r2, r_in=r1, phi=phi, angle=angle, L=-1, a=a)
+    shape_sc_lead = shape_function(r_out=r2, r_in=r1, coverage_angle=coverage_angle, angle=angle, L=-1, a=a)
 
     sz = np.array([[1, 0], [0, -1]])
     cons_law = np.kron(np.eye(2), -sz)
@@ -370,22 +373,21 @@ def make_lead(a, r1, r2, phi, angle, A_correction, with_shell, shape):
     lead = kwant.Builder(symmetry, conservation_law=cons_law)
 
     templ_sm, templ_sc, templ_interface, _ = discretized_hamiltonian(a, as_lead=True)
-
-    lat = templ_sc.lattice
-    # Take only a slice of SC instead of the infinite shape_sc_lead
-    shape_sc = shape_function(r_out=r2, r_in=r1, phi=phi, angle=angle, L=a, a=a)
-
-    if A_correction:
-        xyz_offset = get_offset(shape_sc[0], shape_sc[1], lat)
-    else:
-        xyz_offset = (0, 0, 0)
-
-    templ_sc = apply_peierls_to_template(templ_sc, xyz_offset=xyz_offset)
     templ_sm = apply_peierls_to_template(templ_sm)
-    templ_interface = apply_peierls_to_template(templ_interface)
-
     lead.fill(templ_sm, *shape_normal_lead)
+
     if with_shell:
+        lat = templ_sc.lattice
+        # Take only a slice of SC instead of the infinite shape_sc_lead
+        shape_sc = shape_function(r_out=r2, r_in=r1, coverage_angle=coverage_angle, angle=angle, L=a, a=a)
+
+        if A_correction:
+            xyz_offset = get_offset(*shape_sc, lat)
+        else:
+            xyz_offset = (0, 0, 0)
+
+        templ_sc = apply_peierls_to_template(templ_sc, xyz_offset=xyz_offset)
+        templ_interface = apply_peierls_to_template(templ_interface)
         lead.fill(templ_sc, *shape_sc_lead)
 
         # Adding a tunnel barrier between SM and SC

@@ -1,15 +1,18 @@
 import hpc05
+from time import sleep
+import sys
 client = hpc05.Client(profile='pbs4', timeout=60)
 print("Connected to hpc05")
-from time import sleep
 sleep(2)
 dview = client[:]
 dview.use_dill()
 lview = client.load_balanced_view()
 print('Connected to {} engines.'.format(len(dview)))
-while len(dview) < 100:
-    sleep(2)
+
+if len(dview) < 100:
     print(len(dview))
+    sys.exit(1)
+
 get_ipython().magic("px import sys, os; sys.path.append(os.path.expanduser('~/Work/induced_gap_B_field/'))")
 
 
@@ -29,10 +32,10 @@ from funcs import constants
 
 print(kwant.__version__)
 
-params = dict(Delta=60, c_tunnel=5/8, **constants.__dict__)
+params = dict(Delta=60, c_tunnel=5/8, **funcs.constants.__dict__)
 
 syst_pars = dict(a=10, onsite_disorder=False,
-                 L=2000, phi=135, r1=50, r2=70, shape='circle',
+                 L=2000, coverage_angle=135, r1=50, r2=70, shape='circle',
                  with_leads=True, with_shell=True, A_correction=True)
 
 def cond(val, syst_pars=syst_pars, params=params):
@@ -40,7 +43,7 @@ def cond(val, syst_pars=syst_pars, params=params):
     val['mu_lead'] = val['mu']
     val['B_x'], val['B_y'], val['B_z'] = funcs.spherical_coords(val['B'],
                                                                 val['theta'],
-                                                                val['phi']).T
+                                                                val['phi'])
 
     params = funcs.parse_params(dict(**params, **val))
 
