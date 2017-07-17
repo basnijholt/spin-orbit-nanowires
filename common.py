@@ -1,16 +1,84 @@
 """Common functions for doing stuff."""
 
 import collections
+from datetime import timedelta
 import functools
 from glob import glob
 from itertools import product
+import os
 import subprocess
+import sys
 
 import kwant
 import numpy as np
 import pandas as pd
 import scipy.sparse.linalg as sla
+from scipy.optimize import linear_sum_assignment
 from scipy.sparse import identity
+from toolz import partition_all
+
+assert sys.version_info >= (3, 6), 'Use Python ≥3.6'
+
+
+def run_simulation(lview, func, vals, parameters, fname_i, N=None,
+                   overwrite=False):
+    """Run a simulation where one loops over `vals`. The simulation
+    yields len(vals) results, but by using `N`, you can split it up
+    in parts of length N.
+
+    Parameters
+    ----------
+    lview : ipyparallel.client.view.LoadBalancedView object
+        LoadBalancedView for asynchronous map.
+    func : function
+        Function that takes a list of arguments: `vals`.
+    vals : list
+        Arguments for `func`.
+    parameters : dict
+        Dictionary that is saved with the data, used for constant
+        parameters.
+    fname_i : str
+        Name for the resulting HDF5 files. If the simulation is
+        split up in parts by using the `N` argument, it needs to
+        be a formatteble string, for example 'file_{}'.
+    N : int
+        Number of results in each pandas.DataFrame.
+    overwrite : bool
+        Overwrite the file even if it already exists.
+    """
+    if N is None:
+        N = 1000000
+        if len(vals) > N:
+            raise Exception('You need to split up vals in smaller parts')
+
+    N_files = len(vals) // N + (0 if len(vals) % N == 0 else 1)
+    print('`vals` will be split in {} files.'.format(N_files))
+    time_elapsed = 0
+    parts_done = 0
+    for i, chunk in enumerate(partition_all(N, vals)):
+        fname = fname_i.replace('{}', '{:03d}').format(i)
+        print('Busy with file: {}.'.format(fname))
+        if not os.path.exists(fname) or overwrite:
+            map_async = lview.map_async(func, chunk)
+            map_async.wait_interactive()
+            result = map_async.result()
+            df = pd.DataFrame(result)
+            df = df.assign(**parameters)
+            df = df.assign(git_hash=get_git_revision_hash())
+            os.makedirs(os.path.dirname(fname), exist_ok=True)
+            df.to_hdf(fname, 'all_data', mode='w', complib='zlib', complevel=9)
+
+            # Print useful information
+            N_files_left = N_files - (i + 1)
+            parts_done += 1
+            time_elapsed += map_async.elapsed
+            time_left = timedelta(seconds=(time_elapsed / parts_done) *
+                                  N_files_left)
+            print_str = ('Saved {}, {} more files to go, {} time left '
+                         'before everything is done.')
+            print(print_str.format(fname, N_files_left, time_left))
+        else:
+            print('File: {} was already done.'.format(fname))
 
 
 def parse_params(params):
@@ -29,6 +97,7 @@ def combine_dfs(pattern, fname=None):
     df = df.reset_index(drop=True)
 
     if fname is not None:
+        os.makedirs(os.path.dirname(fname), exist_ok=True)
         df.to_hdf(fname, 'all_data', mode='w', complib='zlib', complevel=9)
 
     return df
@@ -116,34 +185,22 @@ def sparse_diag(matrix, k, sigma, **kwargs):
     return sla.eigsh(matrix, k, sigma=sigma, OPinv=opinv, **kwargs)
 
 
-def sort_eigvals(eigvals, eigvecs):
-    eigvals, eigvecs = map(np.asarray, [eigvals, eigvecs])
-    eigvals_sorted = np.copy(eigvals)
-    eigvecs_sorted = np.copy(eigvecs)
-    not_swapped = collections.defaultdict(list)
+def sort_spectrum(energies, psis):
+    psi = psis[:][0]
+    e = energies[0]
+    sorted_levels = [e]
+    for i in range(len(energies) - 1):
+        e2, psi2 = energies[i+1], psis[:][i+1]
+        perm, line_breaks = best_match(psi, psi2)
+        e2 = e2[perm]
+        intermediate = (e + e2) / 2
+        intermediate[line_breaks] = None
+        psi = psi2[:, perm]
+        e = e2
 
-    for i in range(eigvals.shape[0] - 1):
-        overlap = np.abs(eigvecs_sorted[i].conj().T @ eigvecs_sorted[i+1])
-        idx_max_overlap = overlap.argmax(axis=1)
-        max_overlap = overlap.max(axis=1)
-
-        swap_idx = []
-        for j, found_overlap in enumerate(max_overlap > 1/np.sqrt(2)):
-            if found_overlap:
-                swap_idx.append(j)
-            else:
-                not_swapped[j].append(i+1)
-
-        # Swap all the values that have an overlap > 1/√2
-        eigvals_sorted[i+1, swap_idx] = eigvals_sorted[i+1, idx_max_overlap[swap_idx]]
-        eigvecs_sorted[i+1, :, swap_idx] = eigvecs_sorted[i+1, :, idx_max_overlap[swap_idx]]
-
-    # See how many points were not swapped
-    N = sum(len(l) for l in not_swapped.values()) + len(not_swapped)
-
-    # Add N rows with NaN
-    eigvals_sorted = np.pad(eigvals_sorted, ((0, 0), (0, N)),
-                            mode='constant', constant_values=(np.nan, np.nan))
+        sorted_levels.append(intermediate)
+        sorted_levels.append(e)
+    sorted_levels = np.array(sorted_levels)
 
     # Some eigvals had no matching eigvecs to swap with, these
     # are in `not_swapped`.
@@ -160,16 +217,24 @@ def sort_eigvals(eigvals, eigvecs):
     #                   [nan, nan, 1, 1, nan, nan],
     #                   [nan, nan, nan, nan, 0, 0]]
 
-    swap_j = eigvals.shape[1] + 1
-    for i, (swap_i, ks) in enumerate(not_swapped.items()):
-        ks = ks + [None]
-        for j in range(len(ks) - 1):
-            swap_j += 1
-            row = eigvals_sorted[ks[j]:ks[j+1]]
-            A, B = row[:, swap_i].copy(), row[:, swap_j].copy()
-            row[:, swap_i], row[:, swap_j] = B, A
+    NaNs = np.isnan(sorted_levels)
+    N = np.count_nonzero(NaNs)
+    levels_padded = np.pad(sorted_levels, ((0, 0), (0, N)), mode='constant',
+                           constant_values=(np.nan, np.nan))
+    swaps = collections.defaultdict(list)
+    for i, j in np.argwhere(NaNs):
+        swaps[j].append(i)
 
-    return eigvals_sorted
+    swap_to = sorted_levels.shape[1]
+    for swap_from, xs in swaps.items():
+        xs = xs + [None]
+        for j in range(len(xs) - 1):
+            row = levels_padded[xs[j]:xs[j+1]]
+            A, B = row[:, swap_from].copy(), row[:, swap_to].copy()
+            row[:, swap_from], row[:, swap_to] = B, A
+            swap_to += 1
+
+    return levels_padded[::2]
 
 
 def unique_rows(coor):
