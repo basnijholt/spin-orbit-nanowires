@@ -101,8 +101,8 @@ def apply_peierls_to_template(template, xyz_offset=(0, 0, 0)):
 
 def get_offset(shape, start, lat):
     a = np.max(lat.prim_vecs)
-    sc_coords = [site.pos for site in lat.shape(shape, start)()]
-    xyz_offset = np.mean(sc_coords, axis=0)
+    coords = [site.pos for site in lat.shape(shape, start)()]
+    xyz_offset = np.mean(coords, axis=0)
     return xyz_offset
 
 # Shape functions
