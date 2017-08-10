@@ -28,7 +28,6 @@ from toolz import partition_all
 
 # 3. Internal imports
 import funcs
-from funcs import constants
 
 print(kwant.__version__)
 
@@ -59,7 +58,7 @@ vals = funcs.named_product(B=np.linspace(0, 2, 51),
                            theta=[0, 90],
                            phi=[0, 90],
                            V_bias=np.linspace(-0.25, 0.25, 51),
-                           V_barrier=[15],
+                           V_barrier=[15, 50, 100],
                            g=[0, 50],
                            alpha=[0, 20],
                            orbital=[False, True],
