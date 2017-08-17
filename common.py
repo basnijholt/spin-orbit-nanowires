@@ -55,6 +55,18 @@ def run_simulation(lview, func, vals, parameters, fname_i, N=None,
     print('`vals` will be split in {} files.'.format(N_files))
     time_elapsed = 0
     parts_done = 0
+
+    parameters_new = {}
+    for k, v in parameters.items():
+        if callable(v):
+            warnings.warn('parameters["{}"] is a function and is not saved!'.format(k))
+        else:
+            parameters_new[k] = v
+    parameters = parameters_new
+
+    if N < len(vals) and fname_i.format('1') == fname_i.format('2'):
+        raise Exception('Use a formattable string for `fname_i`.')
+
     for i, chunk in enumerate(partition_all(N, vals)):
         fname = fname_i.replace('{}', '{:03d}').format(i)
         print('Busy with file: {}.'.format(fname))
@@ -63,8 +75,15 @@ def run_simulation(lview, func, vals, parameters, fname_i, N=None,
             map_async.wait_interactive()
             result = map_async.result()
             df = pd.DataFrame(result)
-            df = df.assign(**parameters)
-            df = df.assign(git_hash=get_git_revision_hash())
+
+            common_keys = common_elements(df.columns, parameters.keys())
+            if common_keys:
+                raise Exception('Parameters in both function result and function input',
+                                ': {}'.format(common_keys))
+            else:
+                df = df.assign(**parameters)
+
+            #df = df.assign(git_hash=get_git_revision_hash())
             os.makedirs(os.path.dirname(fname), exist_ok=True)
             df.to_hdf(fname, 'all_data', mode='w', complib='zlib', complevel=9)
 
@@ -79,6 +98,10 @@ def run_simulation(lview, func, vals, parameters, fname_i, N=None,
             print(print_str.format(fname, N_files_left, time_left))
         else:
             print('File: {} was already done.'.format(fname))
+
+
+def common_elements(list1, list2):
+    return [element for element in list1 if element in list2]
 
 
 def parse_params(params):

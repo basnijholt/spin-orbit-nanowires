@@ -1,7 +1,7 @@
 import hpc05
 from time import sleep
 import sys
-client = hpc05.Client(profile='pbs4', timeout=60)
+client = hpc05.Client(profile='pbs', timeout=60)
 print("Connected to hpc05")
 sleep(2)
 dview = client[:]
@@ -12,6 +12,11 @@ print('Connected to {} engines.'.format(len(dview)))
 if len(dview) < 100:
     print(len(dview))
     sys.exit(1)
+
+# with dview.sync_imports():
+#     import sys
+#     import os
+#     sys.path[:] = ['something']
 
 get_ipython().magic("px import sys, os; sys.path.append(os.path.expanduser('~/Work/induced_gap_B_field/'))")
 
@@ -37,7 +42,7 @@ syst_pars = dict(a=10, onsite_disorder=False,
                  L=2000, coverage_angle=135, r1=50, r2=70, shape='circle',
                  with_leads=True, with_shell=True, A_correction=True)
 
-def cond(val, syst_pars=syst_pars, params=params):
+def func(val, syst_pars=syst_pars, params=params):
     import funcs
     val['mu_lead'] = val['mu']
     val['B_x'], val['B_y'], val['B_z'] = funcs.spherical_coords(val['B'],
@@ -53,12 +58,11 @@ def cond(val, syst_pars=syst_pars, params=params):
     return dict(**funcs.andreev_conductance(syst, params, E=val['V_bias']), **val)
 
 
-
 vals = funcs.named_product(B=np.linspace(0, 2, 51),
                            theta=[0, 90],
                            phi=[0, 90],
                            V_bias=np.linspace(-0.25, 0.25, 51),
-                           V_barrier=[15, 50, 100],
+                           V_barrier=[50],
                            g=[0, 50],
                            alpha=[0, 20],
                            orbital=[False, True],
@@ -73,16 +77,5 @@ vals = [val for val in vals if (not (val['theta'] == 0 and val['phi'] != 0)) and
 
 print(len(vals))
 
-for i, chunk in enumerate(partition_all(20000, vals)):
-    fname = 'conductance_{:03d}_with_V.hdf'.format(i)
-    if not os.path.exists(fname):
-        G = lview.map_async(cond, chunk)
-        G.wait_interactive()
-        G = G.result()
-
-        df = pd.DataFrame(G)
-
-        to_save_params = {k: v for k, v in params.items() if k is not callable(k)}
-        df = df.assign(**syst_pars).assign(**to_save_params)
-        df = df.assign(git_hash=funcs.get_git_revision_hash())
-        df.to_hdf(fname, 'all_data', mode='w')
+fname = 'tmp/conductance_with_different_potentials_and_SC_angles_and_V_bias_{}.hdf'
+funcs.run_simulation(lview, func, vals, dict(**params, **syst_pars), fname, N=500000, overwrite=False)
