@@ -321,3 +321,13 @@ def spherical_coords_vec(rs, thetas, phis, degrees=True, unique=False):
     if unique:
         vec = unique_rows(vec)
     return vec
+
+
+def add_direction(row):
+    from copy import copy
+    d = copy(row)
+    xyz = spherical_coords(1, row.pop('theta'), row.pop('phi'))
+    if np.any(np.count_nonzero(xyz) > 1):
+        raise Exception('Cannot determine direction. Only fields in purley B_x, B_y, or B_z can be used.')
+    row['direction'] = np.argmax(xyz)
+    return row
