@@ -5,7 +5,7 @@ import operator
 from types import SimpleNamespace
 
 # 2. External package imports
-# import holoviews as hv
+import holoviews as hv
 import kwant
 from kwant.continuum.discretizer import discretize
 from kwant.digest import uniform
@@ -80,12 +80,12 @@ def apply_peierls_to_template(template, xyz_offset=(0, 0, 0)):
     a = np.max(lat.prim_vecs)  # lattice contant
 
     def phase(site1, site2, B_x, B_y, B_z, orbital, e, hbar):
-        x, y, z = site1.tag
-        direction = site2.tag - site1.tag
-        A = [B_y * (z - z0) - B_z * (y - y0), 0, B_x * (y - y0)]
-        A = np.dot(A, direction) * a**2 * 1e-18 * e / hbar
-        phase = np.exp(-1j * A)
         if orbital:
+            x, y, z = site1.tag
+            direction = site2.tag - site1.tag
+            A = [B_y * (z - z0) - B_z * (y - y0), 0, B_x * (y - y0)]
+            A = np.dot(A, direction) * a**2 * 1e-18 * e / hbar
+            phase = np.exp(-1j * A)
             if lat.norbs == 2:  # No PH degrees of freedom
                 return phase
             elif lat.norbs == 4:
@@ -523,3 +523,33 @@ def find_gap(lead, params, tol=1e-6):
                 lim[0] = energy
         gap = sum(lim) / 2
     return gap
+
+
+def get_cross_section(syst, pos, direction):
+    coord = np.array([s.pos for s in syst.sites if s.pos[direction] == pos])
+    cross_section = np.delete(coord, direction, 1)
+    return cross_section
+
+
+def get_densities(lead, k, params):
+
+    xy = get_cross_section(lead, pos=0, direction=0)
+    h, t = lead.cell_hamiltonian(params=params), lead.inter_cell_hopping(params=params)
+    h_k = h + t * np.exp(1j * k) + t.T.conj() * np.exp(-1j * k)
+
+    vals, vecs = np.linalg.eigh(h_k)
+    indxs = np.argsort(np.abs(vals))
+    vecs = vecs[:, indxs]
+    vals = vals[indxs]
+    
+    norbs = lat_from_syst(lead).norbs
+    densities = np.linalg.norm(vecs.reshape(-1, norbs, len(vecs)), axis=1)**2
+    return xy, vals, densities.T
+
+
+def plot_wfs_in_cross_section(lead, params, k, num_bands=40):
+    xy, energies, densities = get_densities(lead, k, params)
+    wfs = [kwant.plotter.mask_interpolate(xy, density, oversampling=1)[0]
+                                          for density in densities[:num_bands]]
+    ims = {E: hv.Image(wf) for E, wf in zip(energies, wfs)}
+    return hv.HoloMap(ims, kdims=[hv.Dimension('E', unit='meV')])
