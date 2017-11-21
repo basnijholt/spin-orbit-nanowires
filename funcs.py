@@ -532,7 +532,6 @@ def get_cross_section(syst, pos, direction):
 
 
 def get_densities(lead, k, params):
-
     xy = get_cross_section(lead, pos=0, direction=0)
     h, t = lead.cell_hamiltonian(params=params), lead.inter_cell_hopping(params=params)
     h_k = h + t * np.exp(1j * k) + t.T.conj() * np.exp(-1j * k)
