@@ -33,17 +33,17 @@ constants.t = (constants.hbar ** 2 / (2 * constants.m_eff)) * constants.c
 # Hamiltonian and system definition
 @memoize
 def discretized_hamiltonian(a, as_lead=False):
-    ham = ("(0.5 * hbar**2 * (k_x**2 + k_y**2 + k_z**2) / m_eff * c - mu + V(x, y, z)) * kron(sigma_0, sigma_z) + "
+    ham = ("(0.5 * hbar**2 * (k_x**2 + k_y**2 + k_z**2) / m_eff * c - mu + V) * kron(sigma_0, sigma_z) + "
            "alpha * (k_y * kron(sigma_x, sigma_z) - k_x * kron(sigma_y, sigma_z)) + "
            "0.5 * g * mu_B * (B_x * kron(sigma_x, sigma_0) + B_y * kron(sigma_y, sigma_0) + B_z * kron(sigma_z, sigma_0)) + "
            "Delta * kron(sigma_0, sigma_x)")
 
     lead = {'mu': 'mu_lead'} if as_lead else {}
 
-    subst_sm = {'Delta': 0, **lead}
-    subst_sc = {'g': 0, 'alpha': 0, **lead}
-    subst_interface = {'c': 'c * c_tunnel', 'alpha': 0, **lead}
-    subst_barrier = {'mu': 'mu - V_barrier', 'Delta': 0, **lead}
+    subst_sm = {'Delta': 0, 'V': 'V(x, y, z)', **lead}
+    subst_barrier = {'mu': '-V_barrier', 'V': 'V(x, y, z)', 'Delta': 0, **lead}
+    subst_sc = {'g': 0, 'alpha': 0, 'mu': 'mu_sc', 'V': 0}
+    subst_interface = {'c': 'c * c_tunnel', 'alpha': 0, 'V': 0, **lead}
 
     templ_sm = discretize(ham, locals=subst_sm, grid_spacing=a)
     templ_sc = discretize(ham, locals=subst_sc, grid_spacing=a)
