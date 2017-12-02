@@ -365,8 +365,10 @@ def load_BalancingLearner_data(learners, folder='tmp'):
             learners[i].data = pickle.load(f)
 
 async def periodic_data_saver(runner, interval=3600):
-    await asyncio.sleep(interval)
-    folder = time.strftime("tmp-%Y-%m-%d-%Hh%Mm%Ss")
-    save_DataSaver_extra_data(runner.learner, folder=folder)
-    save_BalancingLearner_data(runner.learner.learner.learners, folder=folder)
+    while not runner.task.done():
+        await asyncio.sleep(interval)
+        folder = time.strftime("tmp-%Y-%m-%d-%Hh%Mm%Ss")
+        save_DataSaver_extra_data(runner.learner, folder=folder)
+        save_BalancingLearner_data(runner.learner.learner.learners,
+                                   folder=folder)
     return folder
