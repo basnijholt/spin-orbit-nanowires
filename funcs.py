@@ -540,7 +540,7 @@ def get_densities(lead, k, params):
     indxs = np.argsort(np.abs(vals))
     vecs = vecs[:, indxs]
     vals = vals[indxs]
-    
+
     norbs = lat_from_syst(lead).norbs
     densities = np.linalg.norm(vecs.reshape(-1, norbs, len(vecs)), axis=1)**2
     return xy, vals, densities.T

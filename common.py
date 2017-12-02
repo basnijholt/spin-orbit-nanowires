@@ -6,6 +6,7 @@ import functools
 from glob import glob
 from itertools import product
 import os
+import pickle
 import subprocess
 import sys
 
@@ -331,3 +332,32 @@ def add_direction(row):
         raise Exception('Cannot determine direction. Only fields in purley B_x, B_y, or B_z can be used.')
     row['direction'] = np.argmax(xyz)
     return row
+
+
+def save_extra_data(learner, folder='tmp'):
+    os.makedirs(folder, exist_ok=True)
+    for i, chunk in enumerate(partition_all(10000, learner.extra_data.items())):
+        with open(f'{folder}/extra_data_{i:04d}.pickle', 'wb') as f:
+            pickle.dump(chunk, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+def save_learners_data(learners, folder='tmp'):
+    os.makedirs(folder, exist_ok=True)
+    for i, l in enumerate(learners):
+        with open(f'{folder}/data_learner_{i:04d}.pickle', 'wb') as f:
+            pickle.dump(l.data, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+def load_extra_data(learner, folder='tmp'):
+    from glob import glob
+    extra_data = []
+    for fname in sorted(glob(f'{folder}/extra_data_*')):
+        with open(fname, 'rb') as f:
+            extra_data += pickle.load(f)
+    learner.extra_data = collections.OrderedDict(extra_data)
+
+
+def load_learners_data(learners, folder='tmp'):
+    for i, fname in enumerate(sorted(glob(f'{folder}/data_learner_*'))):
+        with open(fname, 'rb') as f:
+            learners[i].data = pickle.load(f)
