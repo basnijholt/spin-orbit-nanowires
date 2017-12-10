@@ -82,7 +82,7 @@ def apply_peierls_to_template(template, xyz_offset=(0, 0, 0)):
     def phase(site1, site2, B_x, B_y, B_z, orbital, e, hbar):
         if orbital:
             x, y, z = site1.tag
-            direction = site2.tag - site1.tag
+            direction = site1.tag - site2.tag
             A = [B_y * (z - z0) - B_z * (y - y0), 0, B_x * (y - y0)]
             A = np.dot(A, direction) * a**2 * 1e-18 * e / hbar
             phase = np.exp(-1j * A)
