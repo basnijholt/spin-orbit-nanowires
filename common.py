@@ -1,6 +1,7 @@
 """Common functions for doing stuff."""
 
 import asyncio
+from copy import copy
 import collections
 from datetime import timedelta
 import functools
@@ -361,8 +362,18 @@ def load_DataSaver_extra_data(learner, folder='tmp'):
 
 def load_BalancingLearner_data(learners, folder='tmp'):
     for i, fname in enumerate(sorted(glob(f'{folder}/data_learner_*'))):
+        learner = learners[i]
         with gzip.open(fname, 'rb') as f:
-            learners[i].data = pickle.load(f)
+            learner.data = pickle.load(f)
+            refresh_stack(learner)
+
+
+def refresh_stack(learner):
+    # Remove points from stack if they already exist
+    for point in copy(learner._stack):
+        if point in learner.data:
+            learner._stack.pop(point)
+
 
 async def periodic_data_saver(runner, interval=3600):
     while not runner.task.done():
