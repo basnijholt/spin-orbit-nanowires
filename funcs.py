@@ -41,7 +41,7 @@ def discretized_hamiltonian(a, as_lead=False):
     lead = {'mu': 'mu_lead'} if as_lead else {}
 
     subst_sm = {'Delta': 0, 'V': 'V(x, y, z)', **lead}
-    subst_barrier = {'mu': '-V_barrier', 'V': 'V(x, y, z)', 'Delta': 0, **lead}
+    subst_barrier = {'mu': '-V_barrier(x)', 'V': 'V(x, y, z)', 'Delta': 0, **lead}
     subst_sc = {'g': 0, 'alpha': 0, 'mu': 'mu_sc', 'V': 0}
     subst_interface = {'c': 'c * c_tunnel', 'alpha': 0, 'V': 0, **lead}
 
@@ -218,8 +218,8 @@ def change_hopping_at_interface(syst, template, shape1, shape2):
 # System construction
 
 @memoize
-def make_3d_wire(a, L, r1, r2, coverage_angle, angle, onsite_disorder,
-                 with_leads, with_shell, shape, A_correction):
+def make_3d_wire(a, L, L_barrier, r1, r2, coverage_angle, angle,
+                 onsite_disorder, with_leads, with_shell, shape, A_correction):
     """Create a cylindrical 3D wire covered with a
     superconducting (SC) shell, but without superconductor in
     leads.
@@ -276,10 +276,10 @@ def make_3d_wire(a, L, r1, r2, coverage_angle, angle, onsite_disorder,
         raise(NotImplementedError('Only square or circle wire cross'
                                   'section allowed'))
 
-    shape_normal = shape_function(r_out=r1, angle=angle, L0=a, L=L, a=a)
-    shape_barrier = shape_function(r_out=r1, angle=angle, L=a, a=a)
+    shape_normal = shape_function(r_out=r1, angle=angle, L0=L_barrier, L=L, a=a)
+    shape_barrier = shape_function(r_out=r1, angle=angle, L=L_barrier, a=a)
     shape_sc = shape_function(r_out=r2, r_in=r1, coverage_angle=coverage_angle,
-                              angle=angle, L0=a, L=L, a=a)
+                              angle=angle, L0=L_barrier, L=L, a=a)
 
     templ_sm, templ_sc, templ_interface, templ_barrier = discretized_hamiltonian(a)
 
