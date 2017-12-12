@@ -32,7 +32,7 @@ constants.t = (constants.hbar ** 2 / (2 * constants.m_eff)) * constants.c
 
 # Hamiltonian and system definition
 @memoize
-def discretized_hamiltonian(a, as_lead=False):
+def discretized_hamiltonian(a, delta_barrier=True, as_lead=False):
     ham = ("(0.5 * hbar**2 * (k_x**2 + k_y**2 + k_z**2) / m_eff * c - mu + V) * kron(sigma_0, sigma_z) + "
            "alpha * (k_y * kron(sigma_x, sigma_z) - k_x * kron(sigma_y, sigma_z)) + "
            "0.5 * g * mu_B * (B_x * kron(sigma_x, sigma_0) + B_y * kron(sigma_y, sigma_0) + B_z * kron(sigma_z, sigma_0)) + "
@@ -41,7 +41,14 @@ def discretized_hamiltonian(a, as_lead=False):
     lead = {'mu': 'mu_lead'} if as_lead else {}
 
     subst_sm = {'Delta': 0, 'V': 'V(x, y, z)', **lead}
-    subst_barrier = {'mu': '-V_barrier(x)', 'V': 'V(x, y, z)', 'Delta': 0, **lead}
+
+    if delta_barrier:
+        V_barrier = 'V_barrier'
+    else:
+        V_barrier = 'V_barrier(x, V_barrier_height, V_barrier_mu, V_barrier_sigma)'
+    V_barrier = {'mu': f'mu - {V_barrier}'}
+
+    subst_barrier = {**V_barrier, 'V': 'V(x, y, z)', 'Delta': 0, **lead}
     subst_sc = {'g': 0, 'alpha': 0, 'mu': 'mu_sc', 'V': 0}
     subst_interface = {'c': 'c * c_tunnel', 'alpha': 0, 'V': 0, **lead}
 
@@ -218,8 +225,8 @@ def change_hopping_at_interface(syst, template, shape1, shape2):
 # System construction
 
 @memoize
-def make_3d_wire(a, L, L_barrier, r1, r2, coverage_angle, angle,
-                 onsite_disorder, with_leads, with_shell, shape, A_correction):
+def make_3d_wire(a, L, r1, r2, coverage_angle, angle, onsite_disorder,
+                 with_leads, with_shell, shape, A_correction, L_barrier=None):
     """Create a cylindrical 3D wire covered with a
     superconducting (SC) shell, but without superconductor in
     leads.
@@ -264,6 +271,9 @@ def make_3d_wire(a, L, L_barrier, r1, r2, coverage_angle, angle,
     >>> syst, hopping = make_3d_wire(**syst_params)
 
     """
+    if L_barrier is None:
+        L_barrier = a
+
     sz = np.array([[1, 0], [0, -1]])
     cons_law = np.kron(np.eye(2), -sz)
     syst = kwant.Builder(conservation_law=cons_law)
@@ -281,7 +291,8 @@ def make_3d_wire(a, L, L_barrier, r1, r2, coverage_angle, angle,
     shape_sc = shape_function(r_out=r2, r_in=r1, coverage_angle=coverage_angle,
                               angle=angle, L0=L_barrier, L=L, a=a)
 
-    templ_sm, templ_sc, templ_interface, templ_barrier = discretized_hamiltonian(a)
+    delta_barrier = L_barrier == a
+    templ_sm, templ_sc, templ_interface, templ_barrier = discretized_hamiltonian(a, delta_barrier)
 
     templ_sm = apply_peierls_to_template(templ_sm)
     templ_barrier = apply_peierls_to_template(templ_barrier)
@@ -549,6 +560,11 @@ def get_densities(lead, k, params):
 def plot_wfs_in_cross_section(lead, params, k, num_bands=40):
     xy, energies, densities = get_densities(lead, k, params)
     wfs = [kwant.plotter.mask_interpolate(xy, density, oversampling=1)[0]
-                                          for density in densities[:num_bands]]
+           for density in densities[:num_bands]]
     ims = {E: hv.Image(wf) for E, wf in zip(energies, wfs)}
     return hv.HoloMap(ims, kdims=[hv.Dimension('E', unit='meV')])
+
+
+def V_barrier(x, V_barrier_height, V_barrier_mu, V_barrier_sigma):
+    return gaussian(x=x, a=V_barrier_height, mu=V_barrier_mu,
+                    sigma=V_barrier_sigma)

@@ -386,5 +386,5 @@ async def periodic_data_saver(runner, interval=3600):
 
 
 def gaussian(x, a, mu, sigma):
-    factor = a / (sigma * np.sqrt(2 * np.pi))
+    factor = a #/ (sigma * np.sqrt(2 * np.pi))
     return factor * np.exp(-0.5 * (x - mu)**2 / sigma**2)
