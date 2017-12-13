@@ -37,9 +37,8 @@ def connect_ipcluster(n, profile='pbs', folder=None, timeout=60):
     if folder is None:
         folder = os.path.dirname(os.path.realpath(__file__))
 
-    folder = os.path.expanduser(f'{folder}')
     print(f'Adding {folder} to path.')
-    get_ipython().magic(f"px import sys, os; sys.path.append('{folder}')")
+    get_ipython().magic(f"px import sys, os; sys.path.append(os.path.expanduser('{folder}'))")
 
     return client, dview, lview
 
