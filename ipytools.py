@@ -20,7 +20,6 @@ def connect_ipcluster(n, profile='pbs', folder=None, timeout=60):
         # This can happen, we just need to wait a little longer.
         pass
 
-
     t_start = time.time()
     done = len(client) == n
     while not done:
@@ -34,11 +33,9 @@ def connect_ipcluster(n, profile='pbs', folder=None, timeout=60):
     dview.use_dill()
     lview = client.load_balanced_view()
 
-    if folder is None:
-        folder = os.path.dirname(os.path.realpath(__file__))
-
-    print(f'Adding {folder} to path.')
-    get_ipython().magic(f"px import sys, os; sys.path.append(os.path.expanduser('{folder}'))")
+    if folder is not None:
+        print(f'Adding {folder} to path.')
+        get_ipython().magic(f"px import sys, os; sys.path.append(os.path.expanduser('{folder}'))")
 
     return client, dview, lview
 
