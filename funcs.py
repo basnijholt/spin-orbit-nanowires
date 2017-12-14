@@ -43,12 +43,11 @@ def discretized_hamiltonian(a, delta_barrier=True, as_lead=False):
     subst_sm = {'Delta': 0, 'V': 'V(x, y, z)', **lead}
 
     if delta_barrier:
-        V_barrier = 'V_barrier'
+        V_barrier = '-V_barrier'
     else:
-        V_barrier = 'V_barrier(x, V_barrier_height, V_barrier_mu, V_barrier_sigma)'
-    V_barrier = {'mu': f'mu - {V_barrier}'}
+        V_barrier = '-V_barrier(x, V_barrier_height, V_barrier_mu, V_barrier_sigma)'
 
-    subst_barrier = {**V_barrier, 'V': 'V(x, y, z)', 'Delta': 0, **lead}
+    subst_barrier = {'mu': f'mu - {V_barrier}', 'V': 'V(x, y, z)', 'Delta': 0, **lead}
     subst_sc = {'g': 0, 'alpha': 0, 'mu': 'mu_sc', 'V': 0}
     subst_interface = {'c': 'c * c_tunnel', 'alpha': 0, 'V': 0, **lead}
 
@@ -226,7 +225,8 @@ def change_hopping_at_interface(syst, template, shape1, shape2):
 
 @memoize
 def make_3d_wire(a, L, r1, r2, coverage_angle, angle, onsite_disorder,
-                 with_leads, with_shell, shape, A_correction, L_barrier=None):
+                 with_leads, with_shell, shape, A_correction,
+                 right_lead=True, L_barrier=None):
     """Create a cylindrical 3D wire covered with a
     superconducting (SC) shell, but without superconductor in
     leads.
@@ -274,9 +274,7 @@ def make_3d_wire(a, L, r1, r2, coverage_angle, angle, onsite_disorder,
     if L_barrier is None:
         L_barrier = a
 
-    sz = np.array([[1, 0], [0, -1]])
-    cons_law = np.kron(np.eye(2), -sz)
-    syst = kwant.Builder(conservation_law=cons_law)
+    syst = kwant.Builder()
 
     if shape == 'square':
         shape_function = square_sector
@@ -324,8 +322,10 @@ def make_3d_wire(a, L, r1, r2, coverage_angle, angle, onsite_disorder,
                          with_shell=False, shape=shape)
         # The lead at the side of the tunnel barrier.
         syst.attach_lead(lead.reversed())
+
         # The second lead on the other side.
-        syst.attach_lead(lead)
+        if right_lead:
+            syst.attach_lead(lead)
 
     return syst.finalized()
 
@@ -409,24 +409,18 @@ def make_lead(a, r1, r2, coverage_angle, angle, A_correction, with_shell, shape)
 
 
 # Physics functions
-@memoize
-def andreev_conductance(syst, params, E=100e-3, verbose=False):
+def andreev_conductance(syst, params, E):
     """The Andreev conductance is N - R_ee + R_he."""
     smatrix = kwant.smatrix(syst, energy=E, params=params)
     r_ee = smatrix.transmission((0, 0), (0, 0))
-    r_eh = smatrix.transmission((0, 0), (0, 1))
-    r_hh = smatrix.transmission((0, 1), (0, 1))
     r_he = smatrix.transmission((0, 1), (0, 0))
-
-    if verbose:
-        r_ = {'r_ee': r_ee, 'r_eh': r_eh, 'r_he': r_he, 'r_hh': r_hh}
-        for key, val in r_.items():
-            print('{val}: {key}'.format(val=val, key=key))
-
     N_e = smatrix.submatrix((0, 0), (0, 0)).shape[0]
+    return N_e - r_ee + r_he
 
-    return {'G_Andreev': N_e - r_ee + r_he,
-            'G_01': smatrix.transmission(0, 1)}
+
+def conductance(syst, params, E):
+    smatrix = kwant.smatrix(syst, energy=E, params=params)
+    return smatrix.transmission(0, 1)
 
 
 def bands(lead, params, ks=None):
