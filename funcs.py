@@ -25,16 +25,23 @@ constants = SimpleNamespace(
     eV=scipy.constants.eV,
     e=scipy.constants.e,
     c=1e18 / (scipy.constants.eV * 1e-3),  # to get to meV * nm^2
-    mu_B=scipy.constants.physical_constants['Bohr magneton in eV/T'][0] * 1e3)
+    mu_B=scipy.constants.physical_constants['Bohr magneton in eV/T'][0] * 1e3,
+    )
 
 constants.t = (constants.hbar ** 2 / (2 * constants.m_eff)) * constants.c
 
 
 # Hamiltonian and system definition
 @memoize
-def discretized_hamiltonian(a, delta_barrier=True, as_lead=False):
+def discretized_hamiltonian(a, delta_barrier=True, as_lead=False,
+                            rotate_spin_orbit=False):
+
+    SO_z = "alpha * (k_y * kron(sigma_x, sigma_z) - k_x * kron(sigma_y, sigma_z)) + "
+    SO_rotated = ("alpha * (k_y * kron(sigma_x, sigma_z) * (sin(theta_SO) - cos(theta_SO)) + "
+                  "k_x * (cos(theta_SO) * kron(sigma_z, sigma_z) - sin(theta_SO) * kron(sigma_y, sigma_z))) + ")
+
     ham = ("(0.5 * hbar**2 * (k_x**2 + k_y**2 + k_z**2) / m_eff * c - mu + V) * kron(sigma_0, sigma_z) + "
-           "alpha * (k_y * kron(sigma_x, sigma_z) - k_x * kron(sigma_y, sigma_z)) + "
+           + (SO_rotated if rotate_spin_orbit else SO_z) +
            "0.5 * g * mu_B * (B_x * kron(sigma_x, sigma_0) + B_y * kron(sigma_y, sigma_0) + B_z * kron(sigma_z, sigma_0)) + "
            "Delta * kron(sigma_0, sigma_x)")
 
@@ -226,7 +233,7 @@ def change_hopping_at_interface(syst, template, shape1, shape2):
 @memoize
 def make_3d_wire(a, L, r1, r2, coverage_angle, angle, onsite_disorder,
                  with_leads, with_shell, shape, A_correction,
-                 right_lead=True, L_barrier=None):
+                 right_lead=True, L_barrier=None, rotate_spin_orbit=False):
     """Create a cylindrical 3D wire covered with a
     superconducting (SC) shell, but without superconductor in
     leads.
@@ -290,7 +297,8 @@ def make_3d_wire(a, L, r1, r2, coverage_angle, angle, onsite_disorder,
                               angle=angle, L0=L_barrier, L=L, a=a)
 
     delta_barrier = L_barrier == a
-    templ_sm, templ_sc, templ_interface, templ_barrier = discretized_hamiltonian(a, delta_barrier)
+    templ_sm, templ_sc, templ_interface, templ_barrier = discretized_hamiltonian(
+        a, delta_barrier, False, rotate_spin_orbit)
 
     templ_sm = apply_peierls_to_template(templ_sm)
     templ_barrier = apply_peierls_to_template(templ_barrier)
@@ -318,8 +326,8 @@ def make_3d_wire(a, L, r1, r2, coverage_angle, angle, onsite_disorder,
                                            shape_normal, shape_sc)
 
     if with_leads:
-        lead = make_lead(a, r1, r2, coverage_angle, angle, A_correction=False,
-                         with_shell=False, shape=shape)
+        lead = make_lead(a, r1, r2, coverage_angle, angle, rotate_spin_orbit,
+                         A_correction=False, with_shell=False, shape=shape)
         # The lead at the side of the tunnel barrier.
         syst.attach_lead(lead.reversed())
 
@@ -331,7 +339,8 @@ def make_3d_wire(a, L, r1, r2, coverage_angle, angle, onsite_disorder,
 
 
 @memoize
-def make_lead(a, r1, r2, coverage_angle, angle, A_correction, with_shell, shape):
+def make_lead(a, r1, r2, coverage_angle, angle, rotate_spin_orbit,
+              A_correction, with_shell, shape):
     """Create an infinite cylindrical 3D wire partially covered with a
     superconducting (SC) shell.
 
@@ -364,7 +373,8 @@ def make_lead(a, r1, r2, coverage_angle, angle, A_correction, with_shell, shape)
     to a file. So I create a dictionary that is passed to the function.
 
     >>> syst_params = dict(a=10, angle=0, coverage_angle=185, r1=50,
-    ...                    r2=70, A_correction=True, shape='square', with_shell=True)
+    ...                    r2=70, A_correction=True, shape='square',
+    ...                    with_shell=True, rotate_spin_orbit=False)
     >>> syst, hopping = make_lead(**syst_params)
 
     """
@@ -383,7 +393,8 @@ def make_lead(a, r1, r2, coverage_angle, angle, A_correction, with_shell, shape)
     symmetry = kwant.TranslationalSymmetry((a, 0, 0))
     lead = kwant.Builder(symmetry, conservation_law=cons_law)
 
-    templ_sm, templ_sc, templ_interface, _ = discretized_hamiltonian(a, as_lead=True)
+    templ_sm, templ_sc, templ_interface, _ = discretized_hamiltonian(
+        a, as_lead=True, rotate_spin_orbit=rotate_spin_orbit)
     templ_sm = apply_peierls_to_template(templ_sm)
     lead.fill(templ_sm, *shape_normal_lead)
 
