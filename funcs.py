@@ -37,8 +37,8 @@ def discretized_hamiltonian(a, delta_barrier=True, as_lead=False,
                             rotate_spin_orbit=False):
 
     SO_z = "alpha * (k_y * kron(sigma_x, sigma_z) - k_x * kron(sigma_y, sigma_z)) + "
-    SO_rotated = ("alpha * (k_y * kron(sigma_x, sigma_z) * (sin(theta_SO) - cos(theta_SO)) + "
-                  "k_x * (cos(theta_SO) * kron(sigma_z, sigma_z) - sin(theta_SO) * kron(sigma_y, sigma_z))) + ")
+    SO_rotated = ("alpha * k_x * (kron(sigma_z, sigma_z) * cos(theta_SO) - kron(sigma_y, sigma_z) * sin(theta_SO)) + "
+                  "alpha * kron(sigma_x, sigma_z) * (k_y * sin(theta_SO) - k_z * cos(theta_SO)) + ")
 
     ham = ("(0.5 * hbar**2 * (k_x**2 + k_y**2 + k_z**2) / m_eff * c - mu + V) * kron(sigma_0, sigma_z) + "
            + (SO_rotated if rotate_spin_orbit else SO_z) +
