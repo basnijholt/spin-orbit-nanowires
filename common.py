@@ -8,6 +8,7 @@ import functools
 from glob import glob
 import gzip
 from itertools import product
+import math
 import os
 import pickle
 import time
@@ -397,3 +398,21 @@ def loss(ip):
     if len(ip.values) < 1000:
         loss *= 10
     return loss
+
+
+def split(lst, n_parts):
+    n = math.ceil(len(lst) / n_parts)
+    return partition_all(n, lst)
+
+
+def run_learner_in_ipyparallel_client(learner, goal, profile):
+    import hpc05
+    import zmq
+    import adaptive
+    import asyncio
+    client = hpc05.Client(profile=profile, context=zmq.Context())
+    client[:].use_cloudpickle()
+    loop = asyncio.new_event_loop()
+    runner = adaptive.Runner(learner, client, goal=goal, ioloop=loop)
+    runner.run_sync()
+    return learner
