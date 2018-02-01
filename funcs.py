@@ -33,7 +33,7 @@ constants.t = (constants.hbar ** 2 / (2 * constants.m_eff)) * constants.c
 
 # Hamiltonian and system definition
 @memoize
-def discretized_hamiltonian(a, delta_barrier=True, as_lead=False,
+def discretized_hamiltonian(a, as_lead=False,
                             rotate_spin_orbit=False):
 
     SO_z = "alpha * (k_y * kron(sigma_x, sigma_z) - k_x * kron(sigma_y, sigma_z)) + "
@@ -48,22 +48,14 @@ def discretized_hamiltonian(a, delta_barrier=True, as_lead=False,
     lead = {'mu': 'mu_lead'} if as_lead else {}
 
     subst_sm = {'Delta': 0, 'V': 'V(x, y, z)', **lead}
-
-    if delta_barrier:
-        V_barrier = '-V_barrier'
-    else:
-        V_barrier = '-V_barrier(x, V_barrier_height, V_barrier_mu, V_barrier_sigma)'
-
-    subst_barrier = {'mu': f'mu - {V_barrier}', 'V': 'V(x, y, z)', 'Delta': 0, **lead}
     subst_sc = {'g': 0, 'alpha': 0, 'mu': 'mu_sc', 'V': 0}
     subst_interface = {'c': 'c * c_tunnel', 'alpha': 0, 'V': 0, **lead}
 
     templ_sm = discretize(ham, locals=subst_sm, grid_spacing=a)
     templ_sc = discretize(ham, locals=subst_sc, grid_spacing=a)
     templ_interface = discretize(ham, locals=subst_interface, grid_spacing=a)
-    templ_barrier = discretize(ham, locals=subst_barrier, grid_spacing=a)
 
-    return templ_sm, templ_sc, templ_interface, templ_barrier
+    return templ_sm, templ_sc, templ_interface
 
 
 def add_disorder_to_template(template):
@@ -296,18 +288,16 @@ def make_3d_wire(a, L, r1, r2, coverage_angle, angle, onsite_disorder,
     shape_sc = shape_function(r_out=r2, r_in=r1, coverage_angle=coverage_angle,
                               angle=angle, L0=L_barrier, L=L, a=a)
 
-    delta_barrier = L_barrier == a
-    templ_sm, templ_sc, templ_interface, templ_barrier = discretized_hamiltonian(
-        a, delta_barrier, False, rotate_spin_orbit)
+    templ_sm, templ_sc, templ_interface = discretized_hamiltonian(
+        a, False, rotate_spin_orbit)
 
     templ_sm = apply_peierls_to_template(templ_sm)
-    templ_barrier = apply_peierls_to_template(templ_barrier)
 
     if onsite_disorder:
         templ_sm = add_disorder_to_template(templ_sm)
 
     syst.fill(templ_sm, *shape_normal)
-    syst.fill(templ_barrier, *shape_barrier)
+    syst.fill(templ_sm, *shape_barrier)
 
     if with_shell:
 
@@ -393,7 +383,7 @@ def make_lead(a, r1, r2, coverage_angle, angle, rotate_spin_orbit,
     symmetry = kwant.TranslationalSymmetry((a, 0, 0))
     lead = kwant.Builder(symmetry, conservation_law=cons_law)
 
-    templ_sm, templ_sc, templ_interface, _ = discretized_hamiltonian(
+    templ_sm, templ_sc, templ_interface = discretized_hamiltonian(
         a, as_lead=True, rotate_spin_orbit=rotate_spin_orbit)
     templ_sm = apply_peierls_to_template(templ_sm)
     lead.fill(templ_sm, *shape_normal_lead)

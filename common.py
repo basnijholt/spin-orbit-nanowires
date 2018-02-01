@@ -266,6 +266,32 @@ def sort_spectrum(energies, psis):
     return levels_padded[::2]
 
 
+def best_match(psi1, psi2, threshold=None):
+    """Find the best match of two sets of eigenvectors.
+
+    Parameters:
+    -----------
+    psi1, psi2 : numpy 2D complex arrays
+        Arrays of initial and final eigenvectors.
+    threshold : float, optional
+        Minimal overlap when the eigenvectors are considered belonging to the same band.
+        The default value is :math:`1/sqrt(2N)`, where :math:`N` is the length of each eigenvector.
+
+    Returns:
+    --------
+    sorting : numpy 1D integer array
+        Permutation to apply to ``psi2`` to make the optimal match.
+    diconnects : numpy 1D bool array
+        The levels with overlap below the ``threshold`` that should be considered disconnected.
+    """
+    if threshold is None:
+        threshold = (2 * psi1.shape[1])**-0.5
+    Q = np.abs(psi1.T.conj() @ psi2)  # Overlap matrix
+    orig, perm = linear_sum_assignment(-Q)
+    return perm, Q[orig, perm] < threshold
+
+
+
 def unique_rows(coor):
     coor_tuple = [tuple(x) for x in coor]
     unique_coor = sorted(set(coor_tuple), key=lambda x: coor_tuple.index(x))
@@ -376,10 +402,11 @@ def refresh_stack(learner):
             learner._stack.pop(point)
 
 
-async def periodic_data_saver(runner, interval=3600):
+async def periodic_data_saver(runner, folder=None, interval=3600):
     while not runner.task.done():
         await asyncio.sleep(interval)
-        folder = time.strftime("tmp-%Y-%m-%d-%Hh%Mm%Ss")
+        if folder is None:
+            folder = time.strftime("tmp-%Y-%m-%d-%Hh%Mm%Ss")
         save_BalancingLearner_data(runner.learner.learners,
                                    folder=folder)
     return folder
@@ -405,7 +432,7 @@ def split(lst, n_parts):
     return partition_all(n, lst)
 
 
-def run_learner_in_ipyparallel_client(learner, goal, profile):
+def run_learner_in_ipyparallel_client(learner, goal, profile, folder, auto_save=True):
     import hpc05
     import zmq
     import adaptive
@@ -414,5 +441,9 @@ def run_learner_in_ipyparallel_client(learner, goal, profile):
     client[:].use_cloudpickle()
     loop = asyncio.new_event_loop()
     runner = adaptive.Runner(learner, client, goal=goal, ioloop=loop)
+    if isinstance(learner, adaptive.BalancingLearner):
+        backup = loop.create_task(periodic_data_saver(runner, folder, interval=7200))
+    else:
+        raise NotImplementedError('Can only auto save BalancingLearners.')
     runner.run_sync()
     return learner
