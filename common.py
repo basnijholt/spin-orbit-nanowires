@@ -11,6 +11,7 @@ from itertools import product
 import math
 import os
 import pickle
+import re
 import time
 import subprocess
 import sys
@@ -387,8 +388,14 @@ def load_DataSaver_extra_data(learner, folder='tmp'):
     learner.extra_data = collections.OrderedDict(extra_data)
 
 
-def load_BalancingLearner_data(learners, folder='tmp'):
-    for i, fname in enumerate(sorted(glob(f'{folder}/data_learner_*'))):
+def load_BalancingLearner_data(learners, folder=None, files=None):
+    if folder is not None and files is not None:
+        raise Exception('Specify only folder OR files.')
+
+    if folder is not None:
+        files = sorted(glob(f'{folder}/data_learner_*'))
+
+    for i, fname in enumerate(files):
         learner = learners[i]
         with gzip.open(fname, 'rb') as f:
             learner.data = pickle.load(f)
@@ -442,8 +449,31 @@ def run_learner_in_ipyparallel_client(learner, goal, profile, folder, auto_save=
     loop = asyncio.new_event_loop()
     runner = adaptive.Runner(learner, client, goal=goal, ioloop=loop)
     if isinstance(learner, adaptive.BalancingLearner):
-        backup = loop.create_task(periodic_data_saver(runner, folder, interval=7200))
+        backup = loop.create_task(periodic_data_saver(runner, folder, interval=3600))
     else:
         raise NotImplementedError('Can only auto save BalancingLearners.')
     runner.run_sync()
     return learner
+
+
+def tryint(s):
+    try:
+        return int(s)
+    except:
+        return s
+
+
+def alphanum_key(s):
+    """ Turn a string into a list of string and number chunks.
+        "z23a" -> ["z", 23, "a"]
+    """
+    return [tryint(c) for c in re.split('([0-9]+)', s)]
+
+
+def load_learners_from_folders(learners, folder_pat='tmp-*', save_in_folder=None):
+    all_files = [sorted(glob(folder + '/*'), key=alphanum_key)
+                 for folder in sorted(glob(folder_pat), key=alphanum_key)]
+    all_files = sum(all_files, [])
+    load_BalancingLearner_data(learners, files=all_files)
+    if save_in_folder is not None:
+        save_BalancingLearner_data(learners, folder)
