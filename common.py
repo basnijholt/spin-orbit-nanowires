@@ -476,4 +476,4 @@ def load_learners_from_folders(learners, folder_pat='tmp-*', save_in_folder=None
     all_files = sum(all_files, [])
     load_BalancingLearner_data(learners, files=all_files)
     if save_in_folder is not None:
-        save_BalancingLearner_data(learners, folder)
+        save_BalancingLearner_data(learners, save_in_folder)
