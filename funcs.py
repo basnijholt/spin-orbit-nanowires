@@ -15,6 +15,8 @@ import scipy.constants
 # 3. Internal imports
 from combine import combine
 from common import *
+import pfaffian as pf
+
 
 # Parameters taken from arXiv:1204.2792
 # All constant parameters, mostly fundamental constants, in a SimpleNamespace.
@@ -573,3 +575,67 @@ def plot_wfs_in_cross_section(lead, params, k, num_bands=40):
 def V_barrier(x, V_barrier_height, V_barrier_mu, V_barrier_sigma):
     return gaussian(x=x, a=V_barrier_height, mu=V_barrier_mu,
                     sigma=V_barrier_sigma)
+
+
+def is_antisymmetric(H):
+    return np.allclose(-H, H.T)
+
+
+def get_h_k(lead, params):
+    h, t = cell_mats(lead, params)
+    h_k = lambda k: h + t * np.exp(1j * k) + t.T.conj() * np.exp(-1j * k)
+    return h_k
+
+
+def make_skew_symmetric(ham):
+    """
+    Makes a skew symmetric matrix by a matrix multiplication of a unitary
+    matrix U. This unitary matrix is taken from the Topology MOOC 0D, but
+    that is in a different basis. To get to the right basis one multiplies
+    by [[np.eye(2), 0], [0, sigma_y]].
+
+    Parameters:
+    -----------
+    ham : numpy.ndarray
+        Hamiltonian matrix gotten from sys.cell_hamiltonian()
+
+    Returns:
+    --------
+    skew_ham : numpy.ndarray
+        Skew symmetrized Hamiltonian
+    """
+    W = ham.shape[0] // 4
+    I = np.eye(2, dtype=complex)
+    sigma_y = np.array([[0, 1j], [-1j, 0]], dtype=complex)
+    U_1 = np.bmat([[I, I], [1j * I, -1j * I]])
+    U_2 = np.bmat([[I, 0 * I], [0 * I, sigma_y]])
+    U = U_1 @ U_2
+    U = np.kron(np.eye(W, dtype=complex), U)
+    skew_ham = U @ ham @ U.H
+
+    assert is_antisymmetric(skew_ham)
+
+    return skew_ham
+
+
+def calculate_pfaffian(lead, params):
+    """
+    Calculates the Pfaffian for the infinite system by computing it at k = 0
+    and k = pi.
+
+    Parameters:
+    -----------
+    lead : kwant.builder.InfiniteSystem object
+          The finalized system.
+
+    """
+    h_k = get_h_k(lead, params)
+
+    skew_h0 = make_skew_symmetric(h_k(0))
+    skew_h_pi = make_skew_symmetric(h_k(np.pi))
+
+    pf_0 = np.sign(pf.pfaffian(1j * skew_h0, sign_only=True).real)
+    pf_pi = np.sign(pf.pfaffian(1j * skew_h_pi, sign_only=True).real)
+    pfaf = pf_0 * pf_pi
+
+    return pfaf
