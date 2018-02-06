@@ -51,7 +51,7 @@ def discretized_hamiltonian(a, delta_barrier=True, as_lead=False,
     lead = {'mu': 'mu_lead'} if as_lead else {}
 
     subst_sm = {'Delta': 0, 'V': 'V(x, y, z)', **lead}
-    subst_barrier = subst_sm if not delta_barrier else {'mu': 'mu + V_barrier', **subst_sm}
+    subst_barrier = {'mu': 'mu + V_barrier', **subst_sm} if delta_barrier else subst_sm
     subst_sc = {'g': 0, 'alpha': 0, 'mu': 'mu_sc', 'V': 0}
     subst_interface = {'c': 'c * c_tunnel', 'alpha': 0, 'V': 0, **lead}
 
@@ -119,6 +119,7 @@ def get_offset(shape, start, lat):
     coords = [site.pos for site in lat.shape(shape, start)()]
     xyz_offset = np.mean(coords, axis=0)
     return xyz_offset
+
 
 # Shape functions
 
@@ -310,7 +311,8 @@ def make_3d_wire(a, L, r1, r2, coverage_angle, angle, onsite_disorder,
         templ_sm = add_disorder_to_template(templ_sm)
 
     syst.fill(templ_sm, *shape_normal)
-    syst.fill(templ_barrier, *shape_barrier)
+    if L_barrier != 0:
+        syst.fill(templ_barrier, *shape_barrier)
 
     if with_shell:
 
@@ -481,7 +483,8 @@ def make_simple_3d_wire(a, L, r, with_leads, shape, right_lead,
     templ_barrier = apply_peierls_to_template(templ_barrier)
 
     syst.fill(templ_sc, *shape_sc)
-    syst.fill(templ_barrier, *shape_barrier)
+    if L_barrier != 0:
+        syst.fill(templ_barrier, *shape_barrier)
 
     if with_leads:
         lead = make_simple_lead(a, r, rotate_spin_orbit, shape,
