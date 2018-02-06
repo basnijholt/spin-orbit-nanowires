@@ -420,7 +420,7 @@ async def periodic_data_saver(runner, folder=None, interval=3600):
 
 
 def gaussian(x, a, mu, sigma):
-    factor = a #/ (sigma * np.sqrt(2 * np.pi))
+    factor = a  #/ (sigma * np.sqrt(2 * np.pi))
     return factor * np.exp(-0.5 * (x - mu)**2 / sigma**2)
 
 
@@ -429,8 +429,8 @@ def loss(ip):
     A = np.sqrt(areas(ip))
     dev = deviations(ip)[0]
     loss = A * dev + 0.3*A**2
-    if len(ip.values) < 1000:
-        loss *= 10
+    if len(ip.values) < 2000:
+        loss *= 100
     return loss
 
 

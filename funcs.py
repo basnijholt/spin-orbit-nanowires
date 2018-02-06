@@ -14,6 +14,7 @@ import scipy.constants
 
 # 3. Internal imports
 from combine import combine
+import common
 from common import *
 import pfaffian as pf
 
@@ -36,7 +37,7 @@ constants.t = (constants.hbar ** 2 / (2 * constants.m_eff)) * constants.c
 # Hamiltonian and system definition
 @memoize
 def discretized_hamiltonian(a, delta_barrier=True, as_lead=False,
-                            rotate_spin_orbit=False):
+                            rotate_spin_orbit=False, intrinsic_sc=False):
 
     SO_z = "alpha * (k_y * kron(sigma_x, sigma_z) - k_x * kron(sigma_y, sigma_z)) + "
     SO_rotated = ("alpha * k_x * (kron(sigma_z, sigma_z) * cos(theta_SO) - kron(sigma_y, sigma_z) * sin(theta_SO)) + "
@@ -50,13 +51,7 @@ def discretized_hamiltonian(a, delta_barrier=True, as_lead=False,
     lead = {'mu': 'mu_lead'} if as_lead else {}
 
     subst_sm = {'Delta': 0, 'V': 'V(x, y, z)', **lead}
-
-    if delta_barrier:
-        V_barrier = '-V_barrier'
-    else:
-        V_barrier = '-V_barrier(x, V_barrier_height, V_barrier_mu, V_barrier_sigma)'
-
-    subst_barrier = {'mu': f'mu - {V_barrier}', 'V': 'V(x, y, z)', 'Delta': 0, **lead}
+    subst_barrier = subst_sm if not delta_barrier else {'mu': 'mu + V_barrier', **subst_sm}
     subst_sc = {'g': 0, 'alpha': 0, 'mu': 'mu_sc', 'V': 0}
     subst_interface = {'c': 'c * c_tunnel', 'alpha': 0, 'V': 0, **lead}
 
@@ -64,6 +59,11 @@ def discretized_hamiltonian(a, delta_barrier=True, as_lead=False,
     templ_sc = discretize(ham, locals=subst_sc, grid_spacing=a)
     templ_interface = discretize(ham, locals=subst_interface, grid_spacing=a)
     templ_barrier = discretize(ham, locals=subst_barrier, grid_spacing=a)
+
+    if intrinsic_sc:
+        templ_sc = discretize(ham, locals={'V': 'V(x, y, z)', **lead}, grid_spacing=a)
+        return templ_sm, templ_sc, templ_barrier
+
 
     return templ_sm, templ_sc, templ_interface, templ_barrier
 
@@ -282,6 +282,7 @@ def make_3d_wire(a, L, r1, r2, coverage_angle, angle, onsite_disorder,
     """
     if L_barrier is None:
         L_barrier = a
+    L += L_barrier
 
     syst = kwant.Builder()
 
@@ -417,6 +418,138 @@ def make_lead(a, r1, r2, coverage_angle, angle, rotate_spin_orbit,
         # Adding a tunnel barrier between SM and SC
         lead = change_hopping_at_interface(lead, templ_interface,
                                            shape_normal_lead, shape_sc_lead)
+
+    return lead
+
+
+@memoize
+def make_simple_3d_wire(a, L, r, with_leads, shape, right_lead,
+                        L_barrier=None, rotate_spin_orbit=False):
+    """Create a cylindrical 3D wire with intrinsic
+    superconductivity (SC), but SC in the leads.
+
+    Parameters
+    ----------
+    a : int
+        Discretization constant in nm.
+    L : int
+        Length of wire (the scattering part with SC shell.)
+    r : int
+        Radius of the wire in nm.
+    with_leads : bool
+        If True it adds infinite semiconducting leads.
+    shape : str
+        Either `circle` or `square` shaped cross section.
+
+    Returns
+    -------
+    syst : kwant.builder.FiniteSystem
+        The finilized kwant system.
+
+    Examples
+    --------
+    This doesn't use default parameters because the variables need to be saved,
+    to a file. So I create a dictionary that is passed to the function.
+
+    >>> syst_params = dict(a=10, angle=0, site_disorder=False, with_leads=True,
+    ...                    L=30, r=35, shape='square', right_lead=True)
+    >>> syst, hopping = make_simple_3d_wire(**syst_params)
+
+    """
+    if L_barrier is None:
+        L_barrier = a
+    L += L_barrier
+
+    syst = kwant.Builder()
+
+    if shape == 'square':
+        shape_function = square_sector
+    elif shape == 'circle':
+        shape_function = cylinder_sector
+    else:
+        raise(NotImplementedError('Only square or circle wire cross'
+                                  'section allowed'))
+
+    shape_sc = shape_function(r_out=r, angle=0, L0=L_barrier, L=L, a=a)
+    shape_barrier = shape_function(r_out=r, angle=0, L=L_barrier, a=a)
+
+    delta_barrier = L_barrier == a
+    _, templ_sc, templ_barrier = discretized_hamiltonian(
+        a, delta_barrier, False, rotate_spin_orbit, intrinsic_sc=True)
+
+    templ_sc = apply_peierls_to_template(templ_sc)
+    templ_barrier = apply_peierls_to_template(templ_barrier)
+
+    syst.fill(templ_sc, *shape_sc)
+    syst.fill(templ_barrier, *shape_barrier)
+
+    if with_leads:
+        lead = make_simple_lead(a, r, rotate_spin_orbit, shape,
+                                superconducting=False)
+        # The lead at the side of the tunnel barrier.
+        syst.attach_lead(lead.reversed())
+
+        # The second lead on the other side.
+        if right_lead:
+            syst.attach_lead(lead)
+
+    return syst.finalized()
+
+
+@memoize
+def make_simple_lead(a, r, rotate_spin_orbit, shape, superconducting):
+    """Create an infinite cylindrical 3D wire partially covered with a
+    superconducting (SC) shell.
+
+    Parameters
+    ----------
+    a : int
+        Discretization constant in nm.
+    r : int
+        Radius of the wire in nm.
+    shape : str
+        Either `circle` or `square` shaped cross section.
+    superconducting : bool
+        Make the lead superconducting or a normal metal.
+
+    Returns
+    -------
+    syst : kwant.builder.InfiniteSystem
+        The finilized kwant system.
+
+    Examples
+    --------
+    This doesn't use default parameters because the variables need to be saved,
+    to a file. So I create a dictionary that is passed to the function.
+
+    >>> syst_params = dict(a=10, r=35, shape='square', rotate_spin_orbit=False,
+    ...                    superconducting=True)
+    >>> syst, hopping = make_simple_lead(**syst_params)
+
+    """
+    if shape == 'square':
+        shape_function = square_sector
+    elif shape == 'circle':
+        shape_function = cylinder_sector
+    else:
+        raise NotImplementedError('Only square or circle wire cross section allowed')
+
+    shape_lead = shape_function(r_out=r, angle=0, L=-1, a=a)
+
+    sz = np.array([[1, 0], [0, -1]])
+    cons_law = np.kron(np.eye(2), -sz)
+    symmetry = kwant.TranslationalSymmetry((a, 0, 0))
+    lead = kwant.Builder(symmetry, conservation_law=cons_law)
+
+    templ_sm, templ_sc, _ = discretized_hamiltonian(
+        a, as_lead=True, rotate_spin_orbit=rotate_spin_orbit, intrinsic_sc=True)
+
+    if superconducting:
+        templ_sc = apply_peierls_to_template(templ_sc)
+        lead.fill(templ_sc, *shape_lead)
+    else:
+        templ_sm = apply_peierls_to_template(templ_sm)
+        lead.fill(templ_sm, *shape_lead)
 
     return lead
 
@@ -573,7 +706,7 @@ def plot_wfs_in_cross_section(lead, params, k, num_bands=40):
 
 
 def V_barrier(x, V_barrier_height, V_barrier_mu, V_barrier_sigma):
-    return gaussian(x=x, a=V_barrier_height, mu=V_barrier_mu,
+    return common.gaussian(x=x, a=V_barrier_height, mu=V_barrier_mu,
                     sigma=V_barrier_sigma)
 
 
