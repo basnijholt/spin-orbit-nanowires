@@ -54,7 +54,8 @@ def discretized_hamiltonian(a, delta_barrier=True, as_lead=False,
 
     if delta_barrier:
         subst_barrier = {'mu': 'mu - V_barrier', **subst_sm}
-    else:
+    elif not as_lead:
+        # If as_lead, there cannot be a function dependent on x.
         subst_sm['mu'] = 'mu - V_barrier(x, V_0, x0, sigma)'
         subst_barrier = subst_sm
 
