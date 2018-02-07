@@ -51,7 +51,13 @@ def discretized_hamiltonian(a, delta_barrier=True, as_lead=False,
     lead = {'mu': 'mu_lead'} if as_lead else {}
 
     subst_sm = {'Delta': 0, 'V': 'V(x, y, z)', **lead}
-    subst_barrier = {'mu': 'mu + V_barrier', **subst_sm} if delta_barrier else subst_sm
+
+    if delta_barrier:
+        subst_barrier = {'mu': 'mu - V_barrier', **subst_sm}
+    else:
+        subst_sm['mu'] = 'mu - V_barrier(x, V_0, x0, sigma)'
+        subst_barrier = subst_sm
+
     subst_sc = {'g': 0, 'alpha': 0, 'mu': 'mu_sc', 'V': 0}
     subst_interface = {'c': 'c * c_tunnel', 'alpha': 0, 'V': 0, **lead}
 
@@ -425,7 +431,7 @@ def make_lead(a, r1, r2, coverage_angle, angle, rotate_spin_orbit,
 
 
 @memoize
-def make_simple_3d_wire(a, L, r, with_leads, shape, right_lead,
+def make_simple_3d_wire(a, L, r, with_leads, shape, right_lead=True,
                         L_barrier=None, rotate_spin_orbit=False):
     """Create a cylindrical 3D wire with intrinsic
     superconductivity (SC), but SC in the leads.
