@@ -67,9 +67,9 @@ def discretized_hamiltonian(a, delta_barrier=True, as_lead=False,
     templ_barrier = discretize(ham, locals=subst_barrier, grid_spacing=a)
 
     if intrinsic_sc:
-        templ_sc = discretize(ham, locals={'V': 'V(x, y, z)', **lead}, grid_spacing=a)
+        subst_sm.pop('Delta')  # The Hamiltonian is the same except with Delta
+        templ_sc = discretize(ham, locals=subst_sm, grid_spacing=a)
         return templ_sm, templ_sc, templ_barrier
-
 
     return templ_sm, templ_sc, templ_interface, templ_barrier
 
