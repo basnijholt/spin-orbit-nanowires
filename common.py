@@ -439,20 +439,21 @@ def split(lst, n_parts):
     return partition_all(n, lst)
 
 
-def run_learner_in_ipyparallel_client(learner, goal, profile, folder, auto_save=True):
+def run_learner_in_ipyparallel_client(learner, goal, profile, folder,
+                                      auto_save=True, timeout=300):
     import hpc05
     import zmq
     import adaptive
     import asyncio
-    client = hpc05.Client(profile=profile, context=zmq.Context())
+    client = hpc05.Client(profile=profile, context=zmq.Context(), timeout=timeout)
     client[:].use_cloudpickle()
     loop = asyncio.new_event_loop()
-    runner = adaptive.Runner(learner, client, goal=goal, ioloop=loop)
+    runner = adaptive.Runner(learner, executor=client, goal=goal, ioloop=loop)
     if isinstance(learner, adaptive.BalancingLearner):
         backup = loop.create_task(periodic_data_saver(runner, folder, interval=3600))
     else:
         raise NotImplementedError('Can only auto save BalancingLearners.')
-    runner.run_sync()
+    loop.run_until_complete(runner.task)
     return learner
 
 
