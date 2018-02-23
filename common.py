@@ -8,10 +8,8 @@ import functools
 from glob import glob
 import gzip
 from itertools import product
-import math
 import os
 import pickle
-import re
 import time
 import subprocess
 import sys
@@ -22,7 +20,6 @@ import pandas as pd
 import scipy.sparse.linalg as sla
 from scipy.optimize import linear_sum_assignment
 from scipy.sparse import identity
-from toolz import partition_all
 
 assert sys.version_info >= (3, 6), 'Use Python ≥3.6'
 
@@ -373,50 +370,12 @@ def save_DataSaver_extra_data(learner, N=10000, folder='tmp'):
             pickle.dump(chunk, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def save_BalancingLearner_data(learners, folder='tmp'):
-    os.makedirs(folder, exist_ok=True)
-    for i, l in enumerate(learners):
-        with gzip.open(f'{folder}/data_learner_{i:04d}.pickle', 'wb') as f:
-            pickle.dump(l.data, f, protocol=pickle.HIGHEST_PROTOCOL)
-
-
 def load_DataSaver_extra_data(learner, folder='tmp'):
     extra_data = []
     for fname in sorted(glob(f'{folder}/extra_data_*')):
         with gzip.open(fname, 'rb') as f:
             extra_data += pickle.load(f)
     learner.extra_data = collections.OrderedDict(extra_data)
-
-
-def load_BalancingLearner_data(learners, folder=None, files=None):
-    if folder is not None and files is not None:
-        raise Exception('Specify only folder OR files.')
-
-    if folder is not None:
-        files = sorted(glob(f'{folder}/data_learner_*'))
-
-    for i, fname in enumerate(files):
-        learner = learners[i]
-        with gzip.open(fname, 'rb') as f:
-            learner.data = pickle.load(f)
-            refresh_stack(learner)
-
-
-def refresh_stack(learner):
-    # Remove points from stack if they already exist
-    for point in copy(learner._stack):
-        if point in learner.data:
-            learner._stack.pop(point)
-
-
-async def periodic_data_saver(runner, folder=None, interval=3600):
-    while not runner.task.done():
-        await asyncio.sleep(interval)
-        if folder is None:
-            folder = time.strftime("tmp-%Y-%m-%d-%Hh%Mm%Ss")
-        save_BalancingLearner_data(runner.learner.learners,
-                                   folder=folder)
-    return folder
 
 
 def gaussian(x, a, mu, sigma):
@@ -433,48 +392,3 @@ def loss(ip):
         loss *= 100
     return loss
 
-
-def split(lst, n_parts):
-    n = math.ceil(len(lst) / n_parts)
-    return partition_all(n, lst)
-
-
-def run_learner_in_ipyparallel_client(learner, goal, profile, folder,
-                                      auto_save=True, timeout=300):
-    import hpc05
-    import zmq
-    import adaptive
-    import asyncio
-    client = hpc05.Client(profile=profile, context=zmq.Context(), timeout=timeout)
-    client[:].use_cloudpickle()
-    loop = asyncio.new_event_loop()
-    runner = adaptive.Runner(learner, executor=client, goal=goal, ioloop=loop)
-    if isinstance(learner, adaptive.BalancingLearner):
-        backup = loop.create_task(periodic_data_saver(runner, folder, interval=3600))
-    else:
-        raise NotImplementedError('Can only auto save BalancingLearners.')
-    loop.run_until_complete(runner.task)
-    return learner
-
-
-def tryint(s):
-    try:
-        return int(s)
-    except:
-        return s
-
-
-def alphanum_key(s):
-    """ Turn a string into a list of string and number chunks.
-        "z23a" -> ["z", 23, "a"]
-    """
-    return [tryint(c) for c in re.split('([0-9]+)', s)]
-
-
-def load_learners_from_folders(learners, folder_pat='tmp-*', save_in_folder=None):
-    all_files = [sorted(glob(folder + '/*'), key=alphanum_key)
-                 for folder in sorted(glob(folder_pat), key=alphanum_key)]
-    all_files = sum(all_files, [])
-    load_BalancingLearner_data(learners, files=all_files)
-    if save_in_folder is not None:
-        save_BalancingLearner_data(learners, save_in_folder)

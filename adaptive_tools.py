@@ -1,0 +1,136 @@
+import asyncio
+import copy
+from glob import glob
+import gzip
+import math
+import os
+import pickle
+import re
+
+import adaptive
+import toolz
+
+import common
+
+class Learner2D(adaptive.Learner2D):
+
+    def save(self, fname, compress=True):
+        os.makedirs(os.path.dirname(fname), exist_ok=True)
+        _open = gzip.open if compress else open
+        with _open(fname, 'wb') as f:
+            pickle.dump(self.data, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    def load(self, fname, compress=True):
+        _open = gzip.open if compress else open
+        with _open(fname, 'rb') as f:
+            self.data = pickle.load(f)
+            self.refresh_stack()
+
+    def refresh_stack(self):
+        # Remove points from stack if they already exist
+        for point in copy.copy(self._stack):
+            if point in self.data:
+                self._stack.pop(point)
+
+
+class BalancingLearner(adaptive.BalancingLearner):
+
+    def save(self, folder, fname_pattern, compress=True):
+        os.makedirs(folder, exist_ok=True)
+        for i, learner in enumerate(self.learners):
+            fname = os.path.join(folder, fname_pattern.format(f'{i:04d}'))
+            learner.save(fname, compress=compress)
+
+    def load(self, folder, fname_pattern, compress=True):
+        for i, learner in enumerate(self.learners):
+            fname = os.path.join(folder, fname_pattern.format(f'{i:04d}'))
+            learner.load(fname, compress=compress)
+
+    async def periodic_saver(self, runner, folder, fname_pattern,
+                             interval, compress=True):
+        while runner.status() == 'running':
+            await asyncio.sleep(interval)
+            self.save(folder, fname_pattern, compress)
+
+    def start_periodic_saver(self, runner, folder, fname_pattern,
+                             interval=3600, compress=True):
+        saving_coro = self.periodic_saver(runner, folder, fname_pattern,
+                                          interval, compress)
+        return runner.ioloop.create_task(saving_coro)
+
+
+###################################################
+# Running multiple runners, each on its own core. #
+###################################################
+
+def run_learner_in_ipyparallel_client(learner, goal, profile, folder,
+                                      periodic_save=True, timeout=300,
+                                      save_interval=3600):
+    import hpc05
+    import zmq
+    import adaptive
+    import asyncio
+
+    client = hpc05.Client(profile=profile, context=zmq.Context(), timeout=timeout)
+    client[:].use_cloudpickle()
+    loop = asyncio.new_event_loop()
+    runner = adaptive.Runner(learner, executor=client, goal=goal, ioloop=loop)
+
+    if periodic_save:
+        try:
+            learner.start_periodic_saver(runner, folder, 'data_learner_{}.pickle',
+                                         save_interval)
+        except AttributeError:
+            raise Exception(f'Cannot auto-save {type(learner)}.')
+
+    loop.run_until_complete(runner.task)
+    return learner
+
+
+def split_learners_in_executor(learners, executor, profile, ncores, goal=None,
+                              folder='tmp-{}', periodic_save=True,
+                              timeout=300,
+                              save_interval=3600):
+    if goal is None:
+        goal = lambda l: False
+
+    futs = []
+    for i, _learners in enumerate(common.split(learners, ncores)):
+        learner = BalancingLearner(_learners)
+        fut = executor.submit(run_learner_in_ipyparallel_client, learner,
+                              goal, profile, folder.format(f'{i:04d}'),
+                              periodic_save, timeout, save_interval)
+        futs.append(fut)
+    return futs
+
+
+def combine_learners_from_folders(learners, file_pattern='tmp-*/*',
+                                  save_folder=None, save_fname_pattern=None):
+    fnames = sorted(glob(file_pattern), key=common.alphanum_key)
+    for learner, fname in zip(learners, fnames):
+        learner.load(fname)
+
+    if save_folder is not None:
+        BalancingLearner(learners).save(save_folder, save_fname_pattern)
+
+
+######################
+# General functions. #
+######################
+
+def split(lst, n_parts):
+    n = math.ceil(len(lst) / n_parts)
+    return toolz.partition_all(n, lst)
+
+
+def alphanum_key(s):
+    """ Turn a string into a list of string and number chunks.
+        "z23a" -> ["z", 23, "a"]
+    """
+    keys = []
+    for _s in re.split('([0-9]+)', s):
+        try:
+            keys.append(int(_s))
+        except:
+            keys.append(_s)
+    return keys
