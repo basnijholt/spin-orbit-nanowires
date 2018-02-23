@@ -71,9 +71,11 @@
 \begin_body
 
 \begin_layout Standard
-In order to understand the conductance as a function of magnetic field,
- we develop an effective low-energy model of a spin-orbit and Zeeman-coupled
- nanowire covered by a superconductor.
+In order to investigate the conductance as a function of magnetic field,
+ we apply an effective low-energy model 
+\backslash
+cite{LutchynPRL2010,OregPRL2010} of a spin-orbit and Zeeman-coupled nanowire
+ covered by a superconductor.
  We define 
 \begin_inset Formula $x$
 \end_inset
