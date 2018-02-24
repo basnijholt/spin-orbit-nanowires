@@ -10,7 +10,6 @@ import re
 import adaptive
 import toolz
 
-import common
 
 class Learner2D(adaptive.Learner2D):
 
@@ -95,7 +94,7 @@ def split_learners_in_executor(learners, executor, profile, ncores, goal=None,
         goal = lambda l: False
 
     futs = []
-    for i, _learners in enumerate(common.split(learners, ncores)):
+    for i, _learners in enumerate(split(learners, ncores)):
         learner = BalancingLearner(_learners)
         fut = executor.submit(run_learner_in_ipyparallel_client, learner,
                               goal, profile, folder.format(f'{i:04d}'),
@@ -106,7 +105,7 @@ def split_learners_in_executor(learners, executor, profile, ncores, goal=None,
 
 def combine_learners_from_folders(learners, file_pattern='tmp-*/*',
                                   save_folder=None, save_fname_pattern=None):
-    fnames = sorted(glob(file_pattern), key=common.alphanum_key)
+    fnames = sorted(glob(file_pattern), key=alphanum_key)
     for learner, fname in zip(learners, fnames):
         learner.load(fname)
 
