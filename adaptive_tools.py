@@ -13,14 +13,16 @@ import toolz
 
 class Learner2D(adaptive.Learner2D):
 
-    def save(self, fname, compress=True):
-        os.makedirs(os.path.dirname(fname), exist_ok=True)
+    def save(self, folder, fname, compress=True):
+        os.makedirs(folder, exist_ok=True)
+        fname = os.path.join(folder, fname)
         _open = gzip.open if compress else open
         with _open(fname, 'wb') as f:
             pickle.dump(self.data, f, protocol=pickle.HIGHEST_PROTOCOL)
 
-    def load(self, fname, compress=True):
+    def load(self, folder, fname, compress=True):
         _open = gzip.open if compress else open
+        fname = os.path.join(folder, fname)
         with _open(fname, 'rb') as f:
             self.data = pickle.load(f)
             self.refresh_stack()
@@ -34,19 +36,22 @@ class Learner2D(adaptive.Learner2D):
 
 class BalancingLearner(adaptive.BalancingLearner):
 
-    def save(self, folder, fname_pattern, compress=True):
+    def save(self, folder, fname_pattern='data_learner_{}.pickle',
+             compress=True):
         os.makedirs(folder, exist_ok=True)
         for i, learner in enumerate(self.learners):
             fname = os.path.join(folder, fname_pattern.format(f'{i:04d}'))
             learner.save(fname, compress=compress)
 
-    def load(self, folder, fname_pattern, compress=True):
+    def load(self, folder, fname_pattern='data_learner_{}.pickle',
+             compress=True):
         for i, learner in enumerate(self.learners):
-            fname = os.path.join(folder, fname_pattern.format(f'{i:04d}'))
-            learner.load(fname, compress=compress)
+            fname = fname_pattern.format(f'{i:04d}')
+            learner.load(folder, fname, compress=compress)
 
-    async def periodic_saver(self, runner, folder, fname_pattern,
-                             interval, compress=True):
+    async def periodic_saver(self, runner, folder,
+                             fname_pattern='data_learner_{}.pickle',
+                             interval=3600, compress=True):
         while runner.status() == 'running':
             await asyncio.sleep(interval)
             self.save(folder, fname_pattern, compress)
@@ -63,6 +68,7 @@ class BalancingLearner(adaptive.BalancingLearner):
 ###################################################
 
 def run_learner_in_ipyparallel_client(learner, goal, profile, folder,
+                                      fname_pattern='data_learner_{}.pickle',
                                       periodic_save=True, timeout=300,
                                       save_interval=3600):
     import hpc05
@@ -77,7 +83,7 @@ def run_learner_in_ipyparallel_client(learner, goal, profile, folder,
 
     if periodic_save:
         try:
-            learner.start_periodic_saver(runner, folder, 'data_learner_{}.pickle',
+            learner.start_periodic_saver(runner, folder, fname_pattern,
                                          save_interval)
         except AttributeError:
             raise Exception(f'Cannot auto-save {type(learner)}.')
