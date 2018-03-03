@@ -1,5 +1,7 @@
 import asyncio
+from collections import defaultdict
 import copy
+from functools import partial
 from glob import glob
 import gzip
 import math
@@ -8,6 +10,7 @@ import pickle
 import re
 
 import adaptive
+import holoviews as hv
 import toolz
 
 
@@ -40,8 +43,8 @@ class BalancingLearner(adaptive.BalancingLearner):
              compress=True):
         os.makedirs(folder, exist_ok=True)
         for i, learner in enumerate(self.learners):
-            fname = os.path.join(folder, fname_pattern.format(f'{i:04d}'))
-            learner.save(fname, compress=compress)
+            fname = fname_pattern.format(f'{i:04d}')
+            learner.save(folder, fname, compress=compress)
 
     def load(self, folder, fname_pattern='data_learner_{}.pickle',
              compress=True):
@@ -139,3 +142,20 @@ def alphanum_key(s):
         except:
             keys.append(_s)
     return keys
+
+
+######################
+# Plotting learners. #
+######################
+
+def select(learners, args):
+    return next(l for l in learners
+                if tuple(l.cdims.values()) == tuple(args))
+
+def get_dm(learners, plot_function):
+    d = defaultdict(list)
+    for learner in learners:
+        for k, v in learner.cdims.items():
+            d[k].append(v)
+    dm = hv.DynamicMap(partial(plot_function, learners), kdims=list(d.keys()))
+    return dm.redim.values(**d)
