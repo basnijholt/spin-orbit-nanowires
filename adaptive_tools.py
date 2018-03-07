@@ -14,6 +14,26 @@ import holoviews as hv
 import toolz
 
 
+
+class Learner1D(adaptive.Learner1D):
+
+    def save(self, folder, fname, compress=True):
+        os.makedirs(folder, exist_ok=True)
+        fname = os.path.join(folder, fname)
+        _open = gzip.open if compress else open
+        with _open(fname, 'wb') as f:
+            pickle.dump(self.data, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    def load(self, folder, fname, compress=True):
+        _open = gzip.open if compress else open
+        fname = os.path.join(folder, fname)
+        try:
+            with _open(fname, 'rb') as f:
+                self.data = pickle.load(f)
+        except FileNotFoundError:
+            pass
+
+
 class Learner2D(adaptive.Learner2D):
 
     def save(self, folder, fname, compress=True):
@@ -26,9 +46,12 @@ class Learner2D(adaptive.Learner2D):
     def load(self, folder, fname, compress=True):
         _open = gzip.open if compress else open
         fname = os.path.join(folder, fname)
-        with _open(fname, 'rb') as f:
-            self.data = pickle.load(f)
-            self.refresh_stack()
+        try:
+            with _open(fname, 'rb') as f:
+                self.data = pickle.load(f)
+                self.refresh_stack()
+        except FileNotFoundError:
+            pass
 
     def refresh_stack(self):
         # Remove points from stack if they already exist
@@ -38,6 +61,12 @@ class Learner2D(adaptive.Learner2D):
 
 
 class BalancingLearner(adaptive.BalancingLearner):
+    def __init__(self, learners):
+        super().__init__(learners)
+        try:
+            self.cdims = {tuple(l.cdims.values()): l for l in self.learners}
+        except AttributeError:
+            self.cdims = {(i,): l for i, l in enumerate(self.learners)}
 
     def save(self, folder, fname_pattern='data_learner_{}.pickle',
              compress=True):
@@ -65,6 +94,21 @@ class BalancingLearner(adaptive.BalancingLearner):
                                           interval, compress)
         return runner.ioloop.create_task(saving_coro)
 
+    def plot(self, plotter=None):
+        try:
+            d = defaultdict(list)
+            for learner in self.learners:
+                for k, v in learner.cdims.items():
+                    d[k].append(v)
+        except AttributeError:
+            d = {'i': range(len(self.learners))}
+
+        def plot_function(*args):
+            learner = self.cdims[tuple(args)]
+            return learner.plot() if plotter is None else plotter(learner)
+
+        dm = hv.DynamicMap(plot_function, kdims=list(d.keys()))
+        return dm.redim.values(**d)
 
 ###################################################
 # Running multiple runners, each on its own core. #
@@ -143,19 +187,3 @@ def alphanum_key(s):
             keys.append(_s)
     return keys
 
-
-######################
-# Plotting learners. #
-######################
-
-def select(learners, args):
-    return next(l for l in learners
-                if tuple(l.cdims.values()) == tuple(args))
-
-def get_dm(learners, plot_function):
-    d = defaultdict(list)
-    for learner in learners:
-        for k, v in learner.cdims.items():
-            d[k].append(v)
-    dm = hv.DynamicMap(partial(plot_function, learners), kdims=list(d.keys()))
-    return dm.redim.values(**d)
