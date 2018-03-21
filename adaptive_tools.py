@@ -76,13 +76,13 @@ class BalancingLearner(adaptive.BalancingLearner):
             learner.load(folder, fname, compress=compress)
 
     async def _periodic_saver(self, runner, folder,
-                             fname_pattern='data_learner_{}.pickle',
-                             interval=3600, compress=True):
+                             fname_pattern, interval, compress):
         while runner.status() == 'running':
             await asyncio.sleep(interval)
             self.save(folder, fname_pattern, compress)
 
-    def start_periodic_saver(self, runner, folder, fname_pattern,
+    def start_periodic_saver(self, runner, folder,
+                             fname_pattern='data_learner_{}.pickle',
                              interval=3600, compress=True):
         saving_coro = self._periodic_saver(runner, folder, fname_pattern,
                                           interval, compress)
@@ -94,9 +94,8 @@ class BalancingLearner(adaptive.BalancingLearner):
 ###################################################
 
 def run_learner_in_ipyparallel_client(learner, goal, profile, folder,
-                                      fname_pattern='data_learner_{}.pickle',
-                                      periodic_save=True, timeout=300,
-                                      save_interval=3600):
+                                      fname_pattern, periodic_save, timeout,
+                                      save_interval):
     import hpc05
     import zmq
     import adaptive
@@ -109,8 +108,8 @@ def run_learner_in_ipyparallel_client(learner, goal, profile, folder,
 
     if periodic_save:
         try:
-            learner.start_periodic_saver(runner, folder, fname_pattern,
-                                         save_interval)
+            save_task = learner.start_periodic_saver(runner, folder, fname_pattern,
+                                                     save_interval)
         except AttributeError:
             raise Exception(f'Cannot auto-save {type(learner)}.')
 
@@ -119,10 +118,11 @@ def run_learner_in_ipyparallel_client(learner, goal, profile, folder,
 
 
 def split_learners_in_executor(learners, executor, profile, ncores, goal=None,
-                              folder='tmp-{}', periodic_save=True,
-                              timeout=300,
-                              save_interval=3600):
+                               folder='tmp-{}', fname_pattern='data_learner_{}.pickle',
+                               periodic_save=True, timeout=300, save_interval=3600):
     if goal is None:
+        if not periodic_save:
+            raise Exception('Turn on periodic saving if there is no goal.')
         goal = lambda l: False
 
     futs = []
@@ -130,7 +130,8 @@ def split_learners_in_executor(learners, executor, profile, ncores, goal=None,
         learner = BalancingLearner(_learners)
         fut = executor.submit(run_learner_in_ipyparallel_client, learner,
                               goal, profile, folder.format(f'{i:04d}'),
-                              periodic_save, timeout, save_interval)
+                              fname_pattern, periodic_save, timeout,
+                              save_interval)
         futs.append(fut)
     return futs
 
