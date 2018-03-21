@@ -61,12 +61,6 @@ class Learner2D(adaptive.Learner2D):
 
 
 class BalancingLearner(adaptive.BalancingLearner):
-    def __init__(self, learners):
-        super().__init__(learners)
-        try:
-            self.cdims = {tuple(l.cdims.values()): l for l in self.learners}
-        except AttributeError:
-            self.cdims = {(i,): l for i, l in enumerate(self.learners)}
 
     def save(self, folder, fname_pattern='data_learner_{}.pickle',
              compress=True):
@@ -94,21 +88,6 @@ class BalancingLearner(adaptive.BalancingLearner):
                                           interval, compress)
         return runner.ioloop.create_task(saving_coro)
 
-    def plot(self, plotter=None):
-        try:
-            d = defaultdict(list)
-            for learner in self.learners:
-                for k, v in learner.cdims.items():
-                    d[k].append(v)
-        except AttributeError:
-            d = {'i': range(len(self.learners))}
-
-        def plot_function(*args):
-            learner = self.cdims[tuple(args)]
-            return learner.plot() if plotter is None else plotter(learner)
-
-        dm = hv.DynamicMap(plot_function, kdims=list(d.keys()))
-        return dm.redim.values(**d)
 
 ###################################################
 # Running multiple runners, each on its own core. #
