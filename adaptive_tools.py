@@ -75,7 +75,7 @@ class BalancingLearner(adaptive.BalancingLearner):
             fname = fname_pattern.format(f'{i:04d}')
             learner.load(folder, fname, compress=compress)
 
-    async def periodic_saver(self, runner, folder,
+    async def _periodic_saver(self, runner, folder,
                              fname_pattern='data_learner_{}.pickle',
                              interval=3600, compress=True):
         while runner.status() == 'running':
@@ -84,7 +84,7 @@ class BalancingLearner(adaptive.BalancingLearner):
 
     def start_periodic_saver(self, runner, folder, fname_pattern,
                              interval=3600, compress=True):
-        saving_coro = self.periodic_saver(runner, folder, fname_pattern,
+        saving_coro = self._periodic_saver(runner, folder, fname_pattern,
                                           interval, compress)
         return runner.ioloop.create_task(saving_coro)
 
