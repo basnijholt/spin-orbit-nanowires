@@ -1,6 +1,6 @@
 
 # 1. Standard library imports
-from copy import deepcopy
+from copy import copy, deepcopy
 import operator
 from types import SimpleNamespace
 
@@ -562,6 +562,19 @@ def make_simple_lead(a, r, rotate_spin_orbit, shape, superconducting):
         lead.fill(templ_sm, *shape_lead)
 
     return lead
+
+
+def fix_simple_params(params, syst_pars, Delta=0.25):
+    """Helper function to change params for `make_3d_wire`
+    to `make_simple_3d_wire`."""
+    params = copy(params)
+    syst_pars = copy(syst_pars)
+    params['Delta'] = Delta
+    syst_pars['r'] = syst_pars['r1']
+    for k in ['coverage_angle', 'angle', 'r1', 'r2',
+              'A_correction', 'with_shell', 'onsite_disorder']:
+        syst_pars.pop(k, None)
+    return params, syst_pars
 
 
 # Physics functions
