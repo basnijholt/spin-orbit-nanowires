@@ -139,6 +139,7 @@ def split_learners_in_executor(learners, executor, profile, ncores, goal=None,
 def combine_learners_from_folders(learners, file_pattern='tmp-*/*',
                                   save_folder=None, save_fname_pattern=None):
     fnames = sorted(glob(file_pattern), key=alphanum_key)
+    assert len(fnames) == len(learners)
     for learner, fname in zip(learners, fnames):
         learner.load(*os.path.split(fname))
 
