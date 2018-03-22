@@ -140,7 +140,7 @@ def combine_learners_from_folders(learners, file_pattern='tmp-*/*',
                                   save_folder=None, save_fname_pattern=None):
     fnames = sorted(glob(file_pattern), key=alphanum_key)
     for learner, fname in zip(learners, fnames):
-        learner.load(fname)
+        learner.load(*os.path.split(fname))
 
     if save_folder is not None:
         BalancingLearner(learners).save(save_folder, save_fname_pattern)
