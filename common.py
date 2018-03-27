@@ -20,6 +20,7 @@ import pandas as pd
 import scipy.sparse.linalg as sla
 from scipy.optimize import linear_sum_assignment
 from scipy.sparse import identity
+from skimage import measure
 
 assert sys.version_info >= (3, 6), 'Use Python ≥3.6'
 
@@ -392,3 +393,14 @@ def loss(ip):
         loss *= 100
     return loss
 
+
+def get_contours_from_image(image):
+    data = np.rot90(image.data, 3)
+    lbrt = image.bounds.lbrt()
+    contours = measure.find_contours(data, 0.5)
+    dx = (lbrt[2] - lbrt[0]) / len(data)
+    dy = (lbrt[3] - lbrt[1]) / len(data)
+    for c in contours:
+        c[:, 0] = c[:, 0] * dx + lbrt[0]
+        c[:, 1] = c[:, 1] * dy + lbrt[1]
+    return contours
