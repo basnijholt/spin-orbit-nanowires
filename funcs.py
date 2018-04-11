@@ -307,7 +307,7 @@ def make_3d_wire(a, L, r1, r2, coverage_angle, angle, onsite_disorder,
     shape_sc = shape_function(r_out=r2, r_in=r1, coverage_angle=coverage_angle,
                               angle=angle, L0=L_barrier, L=L, a=a)
 
-    delta_barrier = L_barrier == a
+    delta_barrier = (L_barrier == a)
     templ_sm, templ_sc, templ_interface, templ_barrier = discretized_hamiltonian(
         a, delta_barrier, False, rotate_spin_orbit)
 
@@ -482,7 +482,7 @@ def make_simple_3d_wire(a, L, r, with_leads, shape, right_lead=True,
     shape_sc = shape_function(r_out=r, angle=0, L0=L_barrier, L=L, a=a)
     shape_barrier = shape_function(r_out=r, angle=0, L=L_barrier, a=a)
 
-    delta_barrier = L_barrier == a
+    delta_barrier = (L_barrier == a)
     _, templ_sc, templ_barrier = discretized_hamiltonian(
         a, delta_barrier, False, rotate_spin_orbit, intrinsic_sc=True)
 
