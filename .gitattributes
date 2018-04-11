@@ -1,1 +1,1 @@
-*.ipynb filter=nbclearoutput
+*.ipynb filter=ipynb_filter
