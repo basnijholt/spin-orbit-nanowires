@@ -18,7 +18,7 @@ import kwant
 import numpy as np
 import pandas as pd
 import scipy.sparse.linalg as sla
-from scipy.optimize import linear_sum_assignment
+import scipy.optimize
 from scipy.sparse import identity
 from skimage import measure
 
@@ -286,7 +286,7 @@ def best_match(psi1, psi2, threshold=None):
     if threshold is None:
         threshold = (2 * psi1.shape[1])**-0.5
     Q = np.abs(psi1.T.conj() @ psi2)  # Overlap matrix
-    orig, perm = linear_sum_assignment(-Q)
+    orig, perm = scipy.optimize.linear_sum_assignment(-Q)
     return perm, Q[orig, perm] < threshold
 
 
@@ -404,3 +404,82 @@ def get_contours_from_image(image):
         c[:, 0] = c[:, 0] * dx + lbrt[0]
         c[:, 1] = c[:, 1] * dy + lbrt[1]
     return contours
+
+
+def select_keys(d, keys):
+    return {k: v for k, v in d.items() if k in keys}
+
+
+def smooth_bump(params, pot_params):
+    """A modified Gaussian that starts at y=V_l and ends at y=V_r.
+
+    Parameters
+    ----------
+    params : dict
+        With keys `sigma`, `V_l`, and `V_r`
+    pot_params : dict
+        With keys `x_peak` and `V_0`. This dict is obtained by
+        calling `get_smooth_bump_params`.
+
+    Returns
+    -------
+    V : function
+        Function of position `x`.
+    """
+    sigma = params['sigma']
+    V_l = params['V_l']
+    V_r = params['V_r']
+    V_0 = pot_params['V_0']
+    x_peak = pot_params['x_peak']
+    V = lambda x: (
+        gaussian(x, V_0, x_peak, sigma)
+        + V_l + (V_r - V_l) * 0.5 * (1 + np.tanh((x - x_peak) / sigma))
+    )
+    return V
+
+
+@memoize
+def get_smooth_bump_params(params):
+    """Get the parameters for the `smooth_bump` function.
+    
+    Parameters
+    ----------
+    params : dict
+        With keys `sigma`, `V_l`, `V_r`, `x_peak`, and `V_0_top`.
+    
+    Returns
+    -------
+    smooth_bump_params : dict
+        A dictionary with `V_0` and `x_peak`, which is needed for
+        the `smooth_bump` function.
+
+    Notes
+    -----
+    This awesome plot indicates the parameters.
+    +------------------------------------------------+
+    |           x_peak                               |
+    |        |----------|                            |
+    |                   ..            __             |
+    |                  .  .           |              |
+    |                 .    .........  | V_0  ___     |
+    |                .                |       |      |
+    |    ___ ........                 __      |      |
+    |     |         |---|                     | V_r  |
+    |     | V_l     sigma                     |      |
+    |    ---                                 ---     |
+    |                                                |
+    +------------------------------------------------+
+    """
+    def minimizer(V_0, params, pot_params):
+        pot_params['V_0'] = V_0
+        V = smooth_bump(params, pot_params)
+        f_min = lambda x: params['V_0_top'] + params['V_r'] - V(x)
+        op = scipy.optimize.minimize(f_min, pot_params['x_peak'])
+        return op
+    pot_params = {'x_peak': params['x_peak']}
+    V_0 = scipy.optimize.minimize(
+            lambda x: abs(minimizer(x, params, pot_params).fun),
+            x0=params['V_0_top']).x[0]
+    x_peak = minimizer(V_0, params, pot_params).x[0]
+    x_peak = 2*pot_params['x_peak'] - x_peak
+    return {'V_0': V_0, 'x_peak': x_peak}

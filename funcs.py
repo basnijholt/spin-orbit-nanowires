@@ -1,6 +1,7 @@
 
 # 1. Standard library imports
 from copy import copy, deepcopy
+from functools import partial
 import operator
 from types import SimpleNamespace
 
@@ -11,7 +12,6 @@ from kwant.continuum.discretizer import discretize
 from kwant.digest import uniform
 import numpy as np
 import scipy.constants
-import scipy.optimize
 
 # 3. Internal imports
 from combine import combine
@@ -36,7 +36,7 @@ constants.t = (constants.hbar ** 2 / (2 * constants.m_eff)) * constants.c
 
 
 # Hamiltonian and system definition
-@memoize
+@common.memoize
 def discretized_hamiltonian(a, delta_barrier=True, as_lead=False,
                             rotate_spin_orbit=False, intrinsic_sc=False):
 
@@ -241,7 +241,7 @@ def change_hopping_at_interface(syst, template, shape1, shape2):
 
 # System construction
 
-@memoize
+@common.memoize
 def make_3d_wire(a, L, r1, r2, coverage_angle, angle, onsite_disorder,
                  with_leads, with_shell, shape, A_correction,
                  right_lead=True, L_barrier=None, rotate_spin_orbit=False):
@@ -351,7 +351,7 @@ def make_3d_wire(a, L, r1, r2, coverage_angle, angle, onsite_disorder,
     return syst.finalized()
 
 
-@memoize
+@common.memoize
 def make_lead(a, r1, r2, coverage_angle, angle, rotate_spin_orbit,
               A_correction, with_shell, shape):
     """Create an infinite cylindrical 3D wire partially covered with a
@@ -432,7 +432,7 @@ def make_lead(a, r1, r2, coverage_angle, angle, rotate_spin_orbit,
     return lead
 
 
-@memoize
+@common.memoize
 def make_simple_3d_wire(a, L, r, with_leads, shape, right_lead=True,
                         L_barrier=None, rotate_spin_orbit=False):
     """Create a cylindrical 3D wire with intrinsic
@@ -507,7 +507,7 @@ def make_simple_3d_wire(a, L, r, with_leads, shape, right_lead=True,
     return syst.finalized()
 
 
-@memoize
+@common.memoize
 def make_simple_lead(a, r, rotate_spin_orbit, shape, superconducting):
     """Create an infinite cylindrical 3D wire partially covered with a
     superconducting (SC) shell.
@@ -639,7 +639,7 @@ def cell_mats(lead, params, bias=0):
     return h, t
 
 
-@memoize
+@common.memoize
 def gap_minimizer(lead, params, energy):
     """Function that minimizes a function to find the band gap.
     This objective function checks if there are progagating modes at a
@@ -665,7 +665,7 @@ def gap_minimizer(lead, params, energy):
     return np.min(np.abs(norm - 1))
 
 
-@memoize
+@common.memoize
 def find_gap(lead, params, tol=1e-6):
     """Finds the gapsize by peforming a binary search of the modes with a
     tolarance of tol.
@@ -798,75 +798,16 @@ def calculate_pfaffian(lead, params):
     return pfaf
 
 
-def smooth_bump(params, pot_params):
-    """A modified Gaussian that starts at y=V_l and ends at y=V_r.
-    
-    Parameters
-    ----------
-    params : dict
-        With keys `sigma`, `V_l`, and `V_r`
-    pot_params : dict
-        With keys `x_peak` and `V_0`. This dict is obtained by
-        calling `get_smooth_bump_params`.
-    
-    Returns
-    -------
-    V : function
-        Function of position `x`.
-    """
-    sigma = params['sigma']
-    V_0 = pot_params['V_0']
-    x_peak = pot_params['x_peak']
-    V_l = params['V_l']
-    V_r = params['V_r']
-    V = lambda x: (
-        common.gaussian(x, V_0, x_peak, sigma)
-        + V_l + (V_r - V_l) * 0.5 * (1 + np.tanh((x - x_peak) / sigma))
-    )
-    return V
-
-
-def get_smooth_bump_params(params):
-    """Get the parameters for the `smooth_bump` function.
-    
-    Parameters
-    ----------
-    params : dict
-        With keys `sigma`, `V_l`, `V_r`, `x_peak`, and `V_0_top`.
-    
-    Returns
-    -------
-    smooth_bump_params : dict
-        A dictionary with `V_0` and `x_peak`, which is needed for
-        the `smooth_bump` function.
-
-    Notes
-    -----
-    This awesome plot indicates the parameters.
-    +------------------------------------------------+
-    |           x_peak                               |
-    |        |----------|                            |
-    |                   ..            __             |
-    |                  .  .           |              |
-    |                 .    .........  | V_0  ___     |
-    |                .                |       |      |
-    |    ___ ........                 __      |      |
-    |     |         |---|                     | V_r  |
-    |     | V_l     sigma                     |      |
-    |    ---                                 ---     |
-    |                                                |
-    +------------------------------------------------+
-    """
-    def minimizer(V_0, params, pot_params):
-        pot_params['V_0'] = V_0
-        V = smooth_bump(params, pot_params)
-        f_min = lambda x: params['V_0_top'] + params['V_r'] - V(x)
-        op = scipy.optimize.minimize(f_min, pot_params['x_peak'])
-        return op
-    pot_params = {'x_peak': params['x_peak']}
-    V_0 = scipy.optimize.minimize(
-            lambda x: abs(minimizer(x, params, pot_params).fun),
-            x0=params['V_0']).x[0]
-    x_peak = minimizer(V_0, params, pot_params).x[0]
-    x_peak = 2*pot_params['x_peak'] - x_peak
-    return {'V_0': V_0, 'x_peak': x_peak}
+def get_pot(params, syst_pars):
+    # Only passing the params that are used (`_params`) for caching purposes
+    _params = common.select_keys(params, ('sigma', 'V_l', 'V_r',
+                                          'x_peak', 'V_0_top'))
+    pot_params = common.get_smooth_bump_params(_params)
+    V_top = common.smooth_bump(params, pot_params)
+    V_bottom = partial(common.gaussian,
+                       a=params['V_0'],
+                       mu=params['x_peak'],
+                       sigma=params['sigma'])
+    z0 = -syst_pars['r1']
+    z1 = syst_pars['r1']
+    return lambda x, z, V_0: (V_bottom(x, a=V_0) * (z1 - z) + V_top(x) * (z - z0)) / (z1 - z0)
