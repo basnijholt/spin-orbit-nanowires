@@ -57,7 +57,7 @@ def discretized_hamiltonian(a, delta_barrier=True, as_lead=False,
         subst_barrier = {'mu': 'mu - V_barrier', **subst_sm}
     elif not as_lead:
         # If as_lead, there cannot be a function dependent on x.
-        subst_sm['mu'] = 'mu - V_barrier(x, V_0, x0, sigma)'
+        subst_sm['mu'] = 'mu - V_barrier(x, z, V_0)'
         subst_barrier = subst_sm
 
     subst_sc = {'g': 0, 'alpha': 0, 'mu': 'mu_sc', 'V': 0}
@@ -798,15 +798,22 @@ def calculate_pfaffian(lead, params):
     return pfaf
 
 
-def get_pot(params, syst_pars):
+def get_potential(params, syst_pars):
+    """Get a potential shape for in the wire.
+
+    Returns
+    -------
+    pot : function
+        Potential function that takes (x, z, V_0).
+    """
     # Only passing the params that are used (`_params`) for caching purposes
     _params = common.select_keys(params, ('sigma', 'V_l', 'V_r',
-                                          'x_peak', 'V_0_top'))
+                                          'x0', 'V_0_top'))
     pot_params = common.get_smooth_bump_params(_params)
     V_top = common.smooth_bump(params, pot_params)
     V_bottom = partial(common.gaussian,
                        a=params['V_0'],
-                       mu=params['x_peak'],
+                       mu=params['x0'],
                        sigma=params['sigma'])
     z0 = -syst_pars['r1']
     z1 = syst_pars['r1']
