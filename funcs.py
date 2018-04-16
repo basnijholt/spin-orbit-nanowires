@@ -818,3 +818,25 @@ def get_potential(params, syst_pars):
     z0 = -syst_pars['r1']
     z1 = syst_pars['r1']
     return lambda x, z, V_0: (V_bottom(x, a=V_0) * (z1 - z) + V_top(x) * (z - z0)) / (z1 - z0)
+
+
+def get_potential2(params, syst_pars):
+    V_0 = params['V_0']
+    V_r = params['V_r']
+    V_l = params['V_l']
+    x0 = params['x0']
+    sigma = params['sigma']
+    V_bottom = lambda x, V_0: (common.gaussian(x, V_0, x0, sigma) if x > x0 else V_0)
+    V_top = lambda x: (V_r + common.gaussian(x, V_l - V_r, x0, sigma) if x > x0 else V_l)
+    z0 = -syst_pars['r1']
+    z1 = syst_pars['r1']
+    return lambda x, z, V_0: (V_bottom(x, V_0) * (z1 - z) + V_top(x) * (z - z0)) / (z1 - z0)
+
+
+def get_potential2_lead(params, syst_pars):
+    V_r = params['V_r']
+    V_bottom = 0
+    V_top = V_r
+    z0 = -syst_pars['r1']
+    z1 = syst_pars['r1']
+    return lambda x, y, z: (V_bottom * (z1 - z) + V_top * (z - z0)) / (z1 - z0)

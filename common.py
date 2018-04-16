@@ -380,8 +380,7 @@ def load_DataSaver_extra_data(learner, folder='tmp'):
 
 
 def gaussian(x, a, mu, sigma):
-    factor = a  #/ (sigma * np.sqrt(2 * np.pi))
-    return factor * np.exp(-0.5 * (x - mu)**2 / sigma**2)
+    return a * np.exp(-0.5 * (x - mu)**2 / sigma**2)
 
 
 def loss(ip):
