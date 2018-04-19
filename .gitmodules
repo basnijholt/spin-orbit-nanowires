@@ -1,3 +1,12 @@
 [submodule "data"]
 	path = data
 	url = ssh://git@gitlab.kwant-project.org:443/basnijholt/induced_gap_B_field_data.git
+[submodule "quasi-majorana-data"]
+	path = quasi-majorana-data
+	url = ssh://git@gitlab.kwant-project.org:443/qt/basnijholt/quasi-majorana-data.git
+[submodule "quasi-data"]
+	path = quasi-data
+	url = ssh://git@gitlab.kwant-project.org:443/qt/basnijholt/quasi-majorana-data.git
+[submodule "data-quasi"]
+	path = data-quasi
+	url = ssh://git@gitlab.kwant-project.org:443/qt/basnijholt/quasi-majorana-data.git
