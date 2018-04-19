@@ -1,6 +1,6 @@
 [submodule "data"]
 	path = data
 	url = ../induced_gap_B_field_data.git
-[submodule "quasi-data"]
-	path = quasi-data
+[submodule "data-quasi"]
+	path = data-quasi
 	url = ../../qt/basnijholt/quasi-majorana-data.git
