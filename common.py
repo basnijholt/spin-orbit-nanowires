@@ -393,10 +393,10 @@ def loss(ip):
     return loss
 
 
-def get_contours_from_image(image):
+def get_contours_from_image(image, level=0.5):
     data = np.rot90(image.data, 3)
     lbrt = image.bounds.lbrt()
-    contours = measure.find_contours(data, 0.5)
+    contours = measure.find_contours(data, level)
     dx = (lbrt[2] - lbrt[0]) / len(data)
     dy = (lbrt[3] - lbrt[1]) / len(data)
     for c in contours:
