@@ -1,24 +1,24 @@
 """Common functions for doing stuff."""
 
 import asyncio
-from copy import copy
 import collections
-from datetime import timedelta
 import functools
-from glob import glob
 import gzip
-from itertools import product
 import os
 import pickle
-import time
 import subprocess
 import sys
+import time
+from copy import copy
+from datetime import timedelta
+from glob import glob
+from itertools import product
 
 import kwant
 import numpy as np
 import pandas as pd
-import scipy.sparse.linalg as sla
 import scipy.optimize
+import scipy.sparse.linalg as sla
 from scipy.sparse import identity
 from skimage import measure
 

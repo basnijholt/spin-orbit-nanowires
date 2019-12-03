@@ -1,23 +1,23 @@
 # 1. Standard library imports
+import operator
 from copy import copy, deepcopy
 from functools import partial
-import operator
 from types import SimpleNamespace
 
 # 2. External package imports
 import holoviews as hv
 import kwant
-from kwant.continuum.discretizer import discretize
-from kwant.digest import uniform
 import numpy as np
 import scipy.constants
+from kwant.continuum.discretizer import discretize
+from kwant.digest import uniform
+
+import common
+import pfaffian as pf
 
 # 3. Internal imports
 from combine import combine
-import common
 from common import *
-import pfaffian as pf
-
 
 # Parameters taken from arXiv:1204.2792
 # All constant parameters, mostly fundamental constants, in a SimpleNamespace.

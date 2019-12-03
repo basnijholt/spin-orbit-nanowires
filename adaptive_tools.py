@@ -1,13 +1,13 @@
 import asyncio
-from collections import defaultdict
 import copy
-from functools import partial
-from glob import glob
 import gzip
 import math
 import os
 import pickle
 import re
+from collections import defaultdict
+from functools import partial
+from glob import glob
 
 import adaptive
 import holoviews as hv
