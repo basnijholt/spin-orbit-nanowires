@@ -1,4 +1,3 @@
-
 # 1. Standard library imports
 from copy import copy, deepcopy
 from functools import partial
@@ -29,39 +28,44 @@ constants = SimpleNamespace(
     eV=scipy.constants.eV,
     e=scipy.constants.e,
     c=1e18 / (scipy.constants.eV * 1e-3),  # to get to meV * nm^2
-    mu_B=scipy.constants.physical_constants['Bohr magneton in eV/T'][0] * 1e3,
-    )
+    mu_B=scipy.constants.physical_constants["Bohr magneton in eV/T"][0] * 1e3,
+)
 
 constants.t = (constants.hbar ** 2 / (2 * constants.m_eff)) * constants.c
 
 
 # Hamiltonian and system definition
 @common.memoize
-def discretized_hamiltonian(a, delta_barrier=True, as_lead=False,
-                            rotate_spin_orbit=False, intrinsic_sc=False):
+def discretized_hamiltonian(
+    a, delta_barrier=True, as_lead=False, rotate_spin_orbit=False, intrinsic_sc=False
+):
 
     SO_z = "alpha * (k_y * kron(sigma_x, sigma_z) - k_x * kron(sigma_y, sigma_z)) + "
-    SO_rotated = ("alpha * k_x * (kron(sigma_z, sigma_z) * cos(theta_SO) - kron(sigma_y, sigma_z) * sin(theta_SO)) + "
-                  "alpha * kron(sigma_x, sigma_z) * (k_y * sin(theta_SO) - k_z * cos(theta_SO)) + ")
+    SO_rotated = (
+        "alpha * k_x * (kron(sigma_z, sigma_z) * cos(theta_SO) - kron(sigma_y, sigma_z) * sin(theta_SO)) + "
+        "alpha * kron(sigma_x, sigma_z) * (k_y * sin(theta_SO) - k_z * cos(theta_SO)) + "
+    )
 
-    ham = ("(0.5 * hbar**2 * (k_x**2 + k_y**2 + k_z**2) / m_eff * c - mu + V) * kron(sigma_0, sigma_z) + "
-           + (SO_rotated if rotate_spin_orbit else SO_z) +
-           "0.5 * g * mu_B * (B_x * kron(sigma_x, sigma_0) + B_y * kron(sigma_y, sigma_0) + B_z * kron(sigma_z, sigma_0)) + "
-           "Delta * kron(sigma_0, sigma_x)")
+    ham = (
+        "(0.5 * hbar**2 * (k_x**2 + k_y**2 + k_z**2) / m_eff * c - mu + V) * kron(sigma_0, sigma_z) + "
+        + (SO_rotated if rotate_spin_orbit else SO_z)
+        + "0.5 * g * mu_B * (B_x * kron(sigma_x, sigma_0) + B_y * kron(sigma_y, sigma_0) + B_z * kron(sigma_z, sigma_0)) + "
+        "Delta * kron(sigma_0, sigma_x)"
+    )
 
-    lead = {'mu': 'mu_lead'} if as_lead else {}
+    lead = {"mu": "mu_lead"} if as_lead else {}
 
-    subst_sm = {'Delta': 0, 'V': 'V(x, y, z)', **lead}
+    subst_sm = {"Delta": 0, "V": "V(x, y, z)", **lead}
 
     if delta_barrier:
-        subst_barrier = {'mu': 'mu - V_barrier', **subst_sm}
+        subst_barrier = {"mu": "mu - V_barrier", **subst_sm}
     elif not as_lead:
         # If as_lead, there cannot be a function dependent on x.
-        subst_sm['mu'] = 'mu - V_barrier(x, z, V_0)'
+        subst_sm["mu"] = "mu - V_barrier(x, z, V_0)"
         subst_barrier = subst_sm
 
-    subst_sc = {'g': 0, 'alpha': 0, 'mu': 'mu_sc', 'V': 0}
-    subst_interface = {'c': 'c * c_tunnel', 'alpha': 0, 'V': 0, **lead}
+    subst_sc = {"g": 0, "alpha": 0, "mu": "mu_sc", "V": 0}
+    subst_interface = {"c": "c * c_tunnel", "alpha": 0, "V": 0, **lead}
 
     templ_sm = discretize(ham, locals=subst_sm, grid_spacing=a)
     templ_sc = discretize(ham, locals=subst_sc, grid_spacing=a)
@@ -69,7 +73,7 @@ def discretized_hamiltonian(a, delta_barrier=True, as_lead=False,
     templ_barrier = discretize(ham, locals=subst_barrier, grid_spacing=a)
 
     if intrinsic_sc:
-        subst_sm.pop('Delta')  # The Hamiltonian is the same except with Delta
+        subst_sm.pop("Delta")  # The Hamiltonian is the same except with Delta
         templ_sc = discretize(ham, locals=subst_sm, grid_spacing=a)
         return templ_sm, templ_sc, templ_barrier
 
@@ -86,7 +90,7 @@ def add_disorder_to_template(template):
     mat = s0sz if norbs == 4 else s0
 
     def onsite_disorder(site, disorder, salt):
-        return disorder * (uniform(repr(site), repr(salt)) - .5) * mat
+        return disorder * (uniform(repr(site), repr(salt)) - 0.5) * mat
 
     for site, onsite in template.site_value_pairs():
         onsite = template[site]
@@ -107,13 +111,14 @@ def apply_peierls_to_template(template, xyz_offset=(0, 0, 0)):
             x, y, z = site1.tag
             direction = site1.tag - site2.tag
             A = [B_y * (z - z0) - B_z * (y - y0), 0, B_x * (y - y0)]
-            A = np.dot(A, direction) * a**2 * 1e-18 * e / hbar
+            A = np.dot(A, direction) * a ** 2 * 1e-18 * e / hbar
             phase = np.exp(-1j * A)
             if lat.norbs == 2:  # No PH degrees of freedom
                 return phase
             elif lat.norbs == 4:
-                return np.array([phase, phase.conj(), phase, phase.conj()],
-                                dtype='complex128')
+                return np.array(
+                    [phase, phase.conj(), phase, phase.conj()], dtype="complex128"
+                )
         else:  # No orbital phase
             return 1
 
@@ -130,6 +135,7 @@ def get_offset(shape, start, lat):
 
 
 # Shape functions
+
 
 def square_sector(r_out, r_in=0, L=1, L0=0, coverage_angle=360, angle=0, a=10):
     """Returns the shape function and start coords of a wire
@@ -159,6 +165,7 @@ def square_sector(r_out, r_in=0, L=1, L0=0, coverage_angle=360, angle=0, a=10):
     r_in /= 2
     r_out /= 2
     if r_in > 0:
+
         def shape(site):
             try:
                 x, y, z = site.pos
@@ -166,8 +173,10 @@ def square_sector(r_out, r_in=0, L=1, L0=0, coverage_angle=360, angle=0, a=10):
                 x, y, z = site
             shape_yz = -r_in <= y < r_in and r_in <= z < r_out
             return (shape_yz and L0 <= x < L) if L > 0 else shape_yz
+
         return shape, np.array([L / a - 1, 0, r_in / a + 1], dtype=int)
     else:
+
         def shape(site):
             try:
                 x, y, z = site.pos
@@ -175,6 +184,7 @@ def square_sector(r_out, r_in=0, L=1, L0=0, coverage_angle=360, angle=0, a=10):
                 x, y, z = site
             shape_yz = -r_out <= y < r_out and -r_out <= z < r_out
             return (shape_yz and L0 <= x < L) if L > 0 else shape_yz
+
         return shape, (int((L - a) / a), 0, 0)
 
 
@@ -205,7 +215,7 @@ def cylinder_sector(r_out, r_in=0, L=1, L0=0, coverage_angle=360, angle=0, a=10)
     """
     coverage_angle *= np.pi / 360
     angle *= np.pi / 180
-    r_out_sq, r_in_sq = r_out**2, r_in**2
+    r_out_sq, r_in_sq = r_out ** 2, r_in ** 2
 
     def shape(site):
         try:
@@ -214,22 +224,22 @@ def cylinder_sector(r_out, r_in=0, L=1, L0=0, coverage_angle=360, angle=0, a=10)
             x, y, z = site
         n = (y + 1j * z) * np.exp(1j * angle)
         y, z = n.real, n.imag
-        rsq = y**2 + z**2
-        shape_yz = (r_in_sq <= rsq < r_out_sq and
-                    z >= np.cos(coverage_angle) * np.sqrt(rsq))
+        rsq = y ** 2 + z ** 2
+        shape_yz = r_in_sq <= rsq < r_out_sq and z >= np.cos(coverage_angle) * np.sqrt(
+            rsq
+        )
         return (shape_yz and L0 <= x < L) if L > 0 else shape_yz
 
     r_mid = (r_out + r_in) / 2
-    start_coords = np.array([L - a,
-                             r_mid * np.sin(angle),
-                             r_mid * np.cos(angle)])
+    start_coords = np.array([L - a, r_mid * np.sin(angle), r_mid * np.cos(angle)])
 
     return shape, start_coords
 
 
 def at_interface(site1, site2, shape1, shape2):
-    return ((shape1[0](site1) and shape2[0](site2)) or
-            (shape2[0](site1) and shape1[0](site2)))
+    return (shape1[0](site1) and shape2[0](site2)) or (
+        shape2[0](site1) and shape1[0](site2)
+    )
 
 
 def change_hopping_at_interface(syst, template, shape1, shape2):
@@ -241,10 +251,24 @@ def change_hopping_at_interface(syst, template, shape1, shape2):
 
 # System construction
 
+
 @common.memoize
-def make_3d_wire(a, L, r1, r2, coverage_angle, angle, onsite_disorder,
-                 with_leads, with_shell, shape, A_correction,
-                 right_lead=True, L_barrier=None, rotate_spin_orbit=False):
+def make_3d_wire(
+    a,
+    L,
+    r1,
+    r2,
+    coverage_angle,
+    angle,
+    onsite_disorder,
+    with_leads,
+    with_shell,
+    shape,
+    A_correction,
+    right_lead=True,
+    L_barrier=None,
+    rotate_spin_orbit=False,
+):
     """Create a cylindrical 3D wire covered with a
     superconducting (SC) shell, but without superconductor in
     leads.
@@ -295,22 +319,31 @@ def make_3d_wire(a, L, r1, r2, coverage_angle, angle, onsite_disorder,
 
     syst = kwant.Builder()
 
-    if shape == 'square':
+    if shape == "square":
         shape_function = square_sector
-    elif shape == 'circle':
+    elif shape == "circle":
         shape_function = cylinder_sector
     else:
-        raise(NotImplementedError('Only square or circle wire cross'
-                                  'section allowed'))
+        raise (
+            NotImplementedError("Only square or circle wire cross" "section allowed")
+        )
 
     shape_normal = shape_function(r_out=r1, angle=angle, L0=L_barrier, L=L, a=a)
     shape_barrier = shape_function(r_out=r1, angle=angle, L=L_barrier, a=a)
-    shape_sc = shape_function(r_out=r2, r_in=r1, coverage_angle=coverage_angle,
-                              angle=angle, L0=L_barrier, L=L, a=a)
+    shape_sc = shape_function(
+        r_out=r2,
+        r_in=r1,
+        coverage_angle=coverage_angle,
+        angle=angle,
+        L0=L_barrier,
+        L=L,
+        a=a,
+    )
 
-    delta_barrier = (L_barrier == a)
+    delta_barrier = L_barrier == a
     templ_sm, templ_sc, templ_interface, templ_barrier = discretized_hamiltonian(
-        a, delta_barrier, False, rotate_spin_orbit)
+        a, delta_barrier, False, rotate_spin_orbit
+    )
 
     templ_sm = apply_peierls_to_template(templ_sm)
     templ_barrier = apply_peierls_to_template(templ_barrier)
@@ -335,12 +368,22 @@ def make_3d_wire(a, L, r1, r2, coverage_angle, angle, onsite_disorder,
 
         # Adding a tunnel barrier between SM and SC
         templ_interface = apply_peierls_to_template(templ_interface)
-        syst = change_hopping_at_interface(syst, templ_interface,
-                                           shape_normal, shape_sc)
+        syst = change_hopping_at_interface(
+            syst, templ_interface, shape_normal, shape_sc
+        )
 
     if with_leads:
-        lead = make_lead(a, r1, r2, coverage_angle, angle, rotate_spin_orbit,
-                         A_correction=False, with_shell=False, shape=shape)
+        lead = make_lead(
+            a,
+            r1,
+            r2,
+            coverage_angle,
+            angle,
+            rotate_spin_orbit,
+            A_correction=False,
+            with_shell=False,
+            shape=shape,
+        )
         # The lead at the side of the tunnel barrier.
         syst.attach_lead(lead.reversed())
 
@@ -352,8 +395,9 @@ def make_3d_wire(a, L, r1, r2, coverage_angle, angle, onsite_disorder,
 
 
 @common.memoize
-def make_lead(a, r1, r2, coverage_angle, angle, rotate_spin_orbit,
-              A_correction, with_shell, shape):
+def make_lead(
+    a, r1, r2, coverage_angle, angle, rotate_spin_orbit, A_correction, with_shell, shape
+):
     """Create an infinite cylindrical 3D wire partially covered with a
     superconducting (SC) shell.
 
@@ -391,15 +435,17 @@ def make_lead(a, r1, r2, coverage_angle, angle, rotate_spin_orbit,
     >>> syst, hopping = make_lead(**syst_params)
 
     """
-    if shape == 'square':
+    if shape == "square":
         shape_function = square_sector
-    elif shape == 'circle':
+    elif shape == "circle":
         shape_function = cylinder_sector
     else:
-        raise NotImplementedError('Only square or circle wire cross section allowed')
+        raise NotImplementedError("Only square or circle wire cross section allowed")
 
     shape_normal_lead = shape_function(r_out=r1, angle=angle, L=-1, a=a)
-    shape_sc_lead = shape_function(r_out=r2, r_in=r1, coverage_angle=coverage_angle, angle=angle, L=-1, a=a)
+    shape_sc_lead = shape_function(
+        r_out=r2, r_in=r1, coverage_angle=coverage_angle, angle=angle, L=-1, a=a
+    )
 
     sz = np.array([[1, 0], [0, -1]])
     cons_law = np.kron(np.eye(2), -sz)
@@ -407,14 +453,17 @@ def make_lead(a, r1, r2, coverage_angle, angle, rotate_spin_orbit,
     lead = kwant.Builder(symmetry, conservation_law=cons_law)
 
     templ_sm, templ_sc, templ_interface, _ = discretized_hamiltonian(
-        a, as_lead=True, rotate_spin_orbit=rotate_spin_orbit)
+        a, as_lead=True, rotate_spin_orbit=rotate_spin_orbit
+    )
     templ_sm = apply_peierls_to_template(templ_sm)
     lead.fill(templ_sm, *shape_normal_lead)
 
     if with_shell:
         lat = templ_sc.lattice
         # Take only a slice of SC instead of the infinite shape_sc_lead
-        shape_sc = shape_function(r_out=r2, r_in=r1, coverage_angle=coverage_angle, angle=angle, L=a, a=a)
+        shape_sc = shape_function(
+            r_out=r2, r_in=r1, coverage_angle=coverage_angle, angle=angle, L=a, a=a
+        )
 
         if A_correction:
             xyz_offset = get_offset(*shape_sc, lat)
@@ -426,15 +475,17 @@ def make_lead(a, r1, r2, coverage_angle, angle, rotate_spin_orbit,
         lead.fill(templ_sc, *shape_sc_lead)
 
         # Adding a tunnel barrier between SM and SC
-        lead = change_hopping_at_interface(lead, templ_interface,
-                                           shape_normal_lead, shape_sc_lead)
+        lead = change_hopping_at_interface(
+            lead, templ_interface, shape_normal_lead, shape_sc_lead
+        )
 
     return lead
 
 
 @common.memoize
-def make_simple_3d_wire(a, L, r, with_leads, shape, right_lead=True,
-                        L_barrier=None, rotate_spin_orbit=False):
+def make_simple_3d_wire(
+    a, L, r, with_leads, shape, right_lead=True, L_barrier=None, rotate_spin_orbit=False
+):
     """Create a cylindrical 3D wire with intrinsic
     superconductivity (SC), but SC in the leads.
 
@@ -472,20 +523,22 @@ def make_simple_3d_wire(a, L, r, with_leads, shape, right_lead=True,
 
     syst = kwant.Builder()
 
-    if shape == 'square':
+    if shape == "square":
         shape_function = square_sector
-    elif shape == 'circle':
+    elif shape == "circle":
         shape_function = cylinder_sector
     else:
-        raise(NotImplementedError('Only square or circle wire cross'
-                                  'section allowed'))
+        raise (
+            NotImplementedError("Only square or circle wire cross" "section allowed")
+        )
 
     shape_sc = shape_function(r_out=r, angle=0, L0=L_barrier, L=L, a=a)
     shape_barrier = shape_function(r_out=r, angle=0, L=L_barrier, a=a)
 
-    delta_barrier = (L_barrier == a)
+    delta_barrier = L_barrier == a
     _, templ_sc, templ_barrier = discretized_hamiltonian(
-        a, delta_barrier, False, rotate_spin_orbit, intrinsic_sc=True)
+        a, delta_barrier, False, rotate_spin_orbit, intrinsic_sc=True
+    )
 
     templ_sc = apply_peierls_to_template(templ_sc)
     templ_barrier = apply_peierls_to_template(templ_barrier)
@@ -495,8 +548,7 @@ def make_simple_3d_wire(a, L, r, with_leads, shape, right_lead=True,
         syst.fill(templ_barrier, *shape_barrier)
 
     if with_leads:
-        lead = make_simple_lead(a, r, rotate_spin_orbit, shape,
-                                superconducting=False)
+        lead = make_simple_lead(a, r, rotate_spin_orbit, shape, superconducting=False)
         # The lead at the side of the tunnel barrier.
         syst.attach_lead(lead.reversed())
 
@@ -538,12 +590,12 @@ def make_simple_lead(a, r, rotate_spin_orbit, shape, superconducting):
     >>> syst, hopping = make_simple_lead(**syst_params)
 
     """
-    if shape == 'square':
+    if shape == "square":
         shape_function = square_sector
-    elif shape == 'circle':
+    elif shape == "circle":
         shape_function = cylinder_sector
     else:
-        raise NotImplementedError('Only square or circle wire cross section allowed')
+        raise NotImplementedError("Only square or circle wire cross section allowed")
 
     shape_lead = shape_function(r_out=r, angle=0, L=-1, a=a)
 
@@ -553,7 +605,8 @@ def make_simple_lead(a, r, rotate_spin_orbit, shape, superconducting):
     lead = kwant.Builder(symmetry, conservation_law=cons_law)
 
     templ_sm, templ_sc, _ = discretized_hamiltonian(
-        a, as_lead=True, rotate_spin_orbit=rotate_spin_orbit, intrinsic_sc=True)
+        a, as_lead=True, rotate_spin_orbit=rotate_spin_orbit, intrinsic_sc=True
+    )
 
     if superconducting:
         templ_sc = apply_peierls_to_template(templ_sc)
@@ -570,10 +623,17 @@ def fix_simple_params(params, syst_pars, Delta=0.25):
     to `make_simple_3d_wire`."""
     params = copy(params)
     syst_pars = copy(syst_pars)
-    params['Delta'] = Delta
-    syst_pars['r'] = syst_pars['r1']
-    for k in ['coverage_angle', 'angle', 'r1', 'r2',
-              'A_correction', 'with_shell', 'onsite_disorder']:
+    params["Delta"] = Delta
+    syst_pars["r"] = syst_pars["r1"]
+    for k in [
+        "coverage_angle",
+        "angle",
+        "r1",
+        "r2",
+        "A_correction",
+        "with_shell",
+        "onsite_disorder",
+    ]:
         syst_pars.pop(k, None)
     return params, syst_pars
 
@@ -717,21 +777,24 @@ def get_densities(lead, k, params):
     vals = vals[indxs]
 
     norbs = lat_from_syst(lead).norbs
-    densities = np.linalg.norm(vecs.reshape(-1, norbs, len(vecs)), axis=1)**2
+    densities = np.linalg.norm(vecs.reshape(-1, norbs, len(vecs)), axis=1) ** 2
     return xy, vals, densities.T
 
 
 def plot_wfs_in_cross_section(lead, params, k, num_bands=40):
     xy, energies, densities = get_densities(lead, k, params)
-    wfs = [kwant.plotter.mask_interpolate(xy, density, oversampling=1)[0]
-           for density in densities[:num_bands]]
+    wfs = [
+        kwant.plotter.mask_interpolate(xy, density, oversampling=1)[0]
+        for density in densities[:num_bands]
+    ]
     ims = {E: hv.Image(wf) for E, wf in zip(energies, wfs)}
-    return hv.HoloMap(ims, kdims=[hv.Dimension('E', unit='meV')])
+    return hv.HoloMap(ims, kdims=[hv.Dimension("E", unit="meV")])
 
 
 def V_barrier(x, V_barrier_height, V_barrier_mu, V_barrier_sigma):
-    return common.gaussian(x=x, a=V_barrier_height, mu=V_barrier_mu,
-                    sigma=V_barrier_sigma)
+    return common.gaussian(
+        x=x, a=V_barrier_height, mu=V_barrier_mu, sigma=V_barrier_sigma
+    )
 
 
 def is_antisymmetric(H):
@@ -807,36 +870,40 @@ def get_potential(params, syst_pars):
         Potential function that takes (x, z, V_0).
     """
     # Only passing the params that are used (`_params`) for caching purposes
-    _params = common.select_keys(params, ('sigma', 'V_l', 'V_r',
-                                          'x0', 'V_0_top'))
+    _params = common.select_keys(params, ("sigma", "V_l", "V_r", "x0", "V_0_top"))
     pot_params = common.get_smooth_bump_params(_params)
     V_top = common.smooth_bump(params, pot_params)
-    V_bottom = partial(common.gaussian,
-                       a=params['V_0'],
-                       mu=params['x0'],
-                       sigma=params['sigma'])
-    z0 = -syst_pars['r1']
-    z1 = syst_pars['r1']
-    return lambda x, z, V_0: (V_bottom(x, a=V_0) * (z1 - z) + V_top(x) * (z - z0)) / (z1 - z0)
+    V_bottom = partial(
+        common.gaussian, a=params["V_0"], mu=params["x0"], sigma=params["sigma"]
+    )
+    z0 = -syst_pars["r1"]
+    z1 = syst_pars["r1"]
+    return lambda x, z, V_0: (V_bottom(x, a=V_0) * (z1 - z) + V_top(x) * (z - z0)) / (
+        z1 - z0
+    )
 
 
 def get_potential2(params, syst_pars):
-    V_0 = params['V_0']
-    V_r = params['V_r']
-    V_l = params['V_l']
-    x0 = params['x0']
-    sigma = params['sigma']
+    V_0 = params["V_0"]
+    V_r = params["V_r"]
+    V_l = params["V_l"]
+    x0 = params["x0"]
+    sigma = params["sigma"]
     V_bottom = lambda x, V_0: (common.gaussian(x, V_0, x0, sigma) if x > x0 else V_0)
-    V_top = lambda x: (V_r + common.gaussian(x, V_l - V_r, x0, sigma) if x > x0 else V_l)
-    z0 = -syst_pars['r1']
-    z1 = syst_pars['r1']
-    return lambda x, z, V_0: (V_bottom(x, V_0) * (z1 - z) + V_top(x) * (z - z0)) / (z1 - z0)
+    V_top = lambda x: (
+        V_r + common.gaussian(x, V_l - V_r, x0, sigma) if x > x0 else V_l
+    )
+    z0 = -syst_pars["r1"]
+    z1 = syst_pars["r1"]
+    return lambda x, z, V_0: (V_bottom(x, V_0) * (z1 - z) + V_top(x) * (z - z0)) / (
+        z1 - z0
+    )
 
 
 def get_potential2_lead(params, syst_pars):
-    V_r = params['V_r']
+    V_r = params["V_r"]
     V_bottom = 0
     V_top = V_r
-    z0 = -syst_pars['r1']
-    z1 = syst_pars['r1']
+    z0 = -syst_pars["r1"]
+    z1 = syst_pars["r1"]
     return lambda x, y, z: (V_bottom * (z1 - z) + V_top * (z - z0)) / (z1 - z0)

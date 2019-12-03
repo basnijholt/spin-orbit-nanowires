@@ -22,11 +22,10 @@ import scipy.optimize
 from scipy.sparse import identity
 from skimage import measure
 
-assert sys.version_info >= (3, 6), 'Use Python ≥3.6'
+assert sys.version_info >= (3, 6), "Use Python ≥3.6"
 
 
-def run_simulation(lview, func, vals, parameters, fname_i, N=None,
-                   overwrite=False):
+def run_simulation(lview, func, vals, parameters, fname_i, N=None, overwrite=False):
     """Run a simulation where one loops over `vals`. The simulation
     yields len(vals) results, but by using `N`, you can split it up
     in parts of length N.
@@ -54,10 +53,10 @@ def run_simulation(lview, func, vals, parameters, fname_i, N=None,
     if N is None:
         N = 1000000
         if len(vals) > N:
-            raise Exception('You need to split up vals in smaller parts')
+            raise Exception("You need to split up vals in smaller parts")
 
     N_files = len(vals) // N + (0 if len(vals) % N == 0 else 1)
-    print('`vals` will be split in {} files.'.format(N_files))
+    print("`vals` will be split in {} files.".format(N_files))
     time_elapsed = 0
     parts_done = 0
 
@@ -69,12 +68,12 @@ def run_simulation(lview, func, vals, parameters, fname_i, N=None,
             parameters_new[k] = v
     parameters = parameters_new
 
-    if N < len(vals) and fname_i.format('1') == fname_i.format('2'):
-        raise Exception('Use a formattable string for `fname_i`.')
+    if N < len(vals) and fname_i.format("1") == fname_i.format("2"):
+        raise Exception("Use a formattable string for `fname_i`.")
 
     for i, chunk in enumerate(partition_all(N, vals)):
-        fname = fname_i.replace('{}', '{:03d}').format(i)
-        print('Busy with file: {}.'.format(fname))
+        fname = fname_i.replace("{}", "{:03d}").format(i)
+        print("Busy with file: {}.".format(fname))
         if not os.path.exists(fname) or overwrite:
             map_async = lview.map_async(func, chunk)
             map_async.wait_interactive()
@@ -83,26 +82,29 @@ def run_simulation(lview, func, vals, parameters, fname_i, N=None,
 
             common_keys = common_elements(df.columns, parameters.keys())
             if common_keys:
-                raise Exception('Parameters in both function result and function input',
-                                ': {}'.format(common_keys))
+                raise Exception(
+                    "Parameters in both function result and function input",
+                    ": {}".format(common_keys),
+                )
             else:
                 df = df.assign(**parameters)
 
-            #df = df.assign(git_hash=get_git_revision_hash())
+            # df = df.assign(git_hash=get_git_revision_hash())
             os.makedirs(os.path.dirname(fname), exist_ok=True)
-            df.to_hdf(fname, 'all_data', mode='w', complib='zlib', complevel=9)
+            df.to_hdf(fname, "all_data", mode="w", complib="zlib", complevel=9)
 
             # Print useful information
             N_files_left = N_files - (i + 1)
             parts_done += 1
             time_elapsed += map_async.elapsed
-            time_left = timedelta(seconds=(time_elapsed / parts_done) *
-                                  N_files_left)
-            print_str = ('Saved {}, {} more files to go, {} time left '
-                         'before everything is done.')
+            time_left = timedelta(seconds=(time_elapsed / parts_done) * N_files_left)
+            print_str = (
+                "Saved {}, {} more files to go, {} time left "
+                "before everything is done."
+            )
             print(print_str.format(fname, N_files_left, time_left))
         else:
-            print('File: {} was already done.'.format(fname))
+            print("File: {} was already done.".format(fname))
 
 
 def common_elements(list1, list2):
@@ -126,7 +128,7 @@ def combine_dfs(pattern, fname=None):
 
     if fname is not None:
         os.makedirs(os.path.dirname(fname), exist_ok=True)
-        df.to_hdf(fname, 'all_data', mode='w', complib='zlib', complevel=9)
+        df.to_hdf(fname, "all_data", mode="w", complib="zlib", complevel=9)
 
     return df
 
@@ -134,7 +136,7 @@ def combine_dfs(pattern, fname=None):
 def lat_from_syst(syst):
     lats = set(s.family for s in syst.sites)
     if len(lats) > 1:
-        raise Exception('No unique lattice in the system.')
+        raise Exception("No unique lattice in the system.")
     return list(lats)[0]
 
 
@@ -147,6 +149,7 @@ def memoize(obj):
         if key not in cache:
             cache[key] = obj(*args, **kwargs)
         return cache[key]
+
     return memoizer
 
 
@@ -158,8 +161,8 @@ def named_product(**items):
 
 def get_git_revision_hash():
     """Get the git hash to save with data to ensure reproducibility."""
-    git_output = subprocess.check_output(['git', 'rev-parse', 'HEAD'])
-    return git_output.decode("utf-8").replace('\n', '')
+    git_output = subprocess.check_output(["git", "rev-parse", "HEAD"])
+    return git_output.decode("utf-8").replace("\n", "")
 
 
 def find_nearest(array, value):
@@ -197,11 +200,11 @@ def sparse_diag(matrix, k, sigma, **kwargs):
 
     Please see scipy.sparse.linalg.eigsh for documentation.
     """
-    class LuInv(sla.LinearOperator):
 
+    class LuInv(sla.LinearOperator):
         def __init__(self, matrix):
             instance = kwant.linalg.mumps.MUMPSContext()
-            instance.analyze(matrix, ordering='pord')
+            instance.analyze(matrix, ordering="pord")
             instance.factor(matrix)
             self.solve = instance.solve
             sla.LinearOperator.__init__(self, matrix.dtype, matrix.shape)
@@ -218,7 +221,7 @@ def sort_spectrum(energies, psis):
     e = energies[0]
     sorted_levels = [e]
     for i in range(len(energies) - 1):
-        e2, psi2 = energies[i+1], psis[:][i+1]
+        e2, psi2 = energies[i + 1], psis[:][i + 1]
         perm, line_breaks = best_match(psi, psi2)
         e2 = e2[perm]
         intermediate = (e + e2) / 2
@@ -247,8 +250,12 @@ def sort_spectrum(energies, psis):
 
     NaNs = np.isnan(sorted_levels)
     N = np.count_nonzero(NaNs)
-    levels_padded = np.pad(sorted_levels, ((0, 0), (0, N)), mode='constant',
-                           constant_values=(np.nan, np.nan))
+    levels_padded = np.pad(
+        sorted_levels,
+        ((0, 0), (0, N)),
+        mode="constant",
+        constant_values=(np.nan, np.nan),
+    )
     swaps = collections.defaultdict(list)
     for i, j in np.argwhere(NaNs):
         swaps[j].append(i)
@@ -257,7 +264,7 @@ def sort_spectrum(energies, psis):
     for swap_from, xs in swaps.items():
         xs = xs + [None]
         for j in range(len(xs) - 1):
-            row = levels_padded[xs[j]:xs[j+1]]
+            row = levels_padded[xs[j] : xs[j + 1]]
             A, B = row[:, swap_from].copy(), row[:, swap_to].copy()
             row[:, swap_from], row[:, swap_to] = B, A
             swap_to += 1
@@ -284,11 +291,10 @@ def best_match(psi1, psi2, threshold=None):
         The levels with overlap below the ``threshold`` that should be considered disconnected.
     """
     if threshold is None:
-        threshold = (2 * psi1.shape[1])**-0.5
+        threshold = (2 * psi1.shape[1]) ** -0.5
     Q = np.abs(psi1.T.conj() @ psi2)  # Overlap matrix
     orig, perm = scipy.optimize.linear_sum_assignment(-Q)
     return perm, Q[orig, perm] < threshold
-
 
 
 def unique_rows(coor):
@@ -307,8 +313,9 @@ def spherical_coords(r, theta, phi, degrees=True):
     degrees : bool
         Degrees when True, radians when False.
     """
-    r, theta, phi = [np.reshape(x, -1) if np.isscalar(x)
-                     else x for x in (r, theta, phi)]
+    r, theta, phi = [
+        np.reshape(x, -1) if np.isscalar(x) else x for x in (r, theta, phi)
+    ]
 
     if degrees:
         theta, phi = map(np.deg2rad, (theta, phi))
@@ -321,7 +328,7 @@ def spherical_coords(r, theta, phi, degrees=True):
 
 
 def cartesian_coords(x, y, z, degree=True):
-    r = np.sqrt(x**2 + y**2 + z**2)
+    r = np.sqrt(x ** 2 + y ** 2 + z ** 2)
     theta = np.arccos(z / r)
     phi = np.arctan(y / x)
 
@@ -356,38 +363,42 @@ def spherical_coords_vec(rs, thetas, phis, degrees=True, unique=False):
 
 def add_direction(row):
     from copy import copy
+
     d = copy(row)
-    xyz = spherical_coords(1, row.pop('theta'), row.pop('phi'))
+    xyz = spherical_coords(1, row.pop("theta"), row.pop("phi"))
     if np.any(np.count_nonzero(xyz) > 1):
-        raise Exception('Cannot determine direction. Only fields in purley B_x, B_y, or B_z can be used.')
-    row['direction'] = np.argmax(xyz)
+        raise Exception(
+            "Cannot determine direction. Only fields in purley B_x, B_y, or B_z can be used."
+        )
+    row["direction"] = np.argmax(xyz)
     return row
 
 
-def save_DataSaver_extra_data(learner, N=10000, folder='tmp'):
+def save_DataSaver_extra_data(learner, N=10000, folder="tmp"):
     os.makedirs(folder, exist_ok=True)
     for i, chunk in enumerate(partition_all(N, learner.extra_data.items())):
-        with gzip.open(f'{folder}/extra_data_{i:04d}.pickle', 'wb') as f:
+        with gzip.open(f"{folder}/extra_data_{i:04d}.pickle", "wb") as f:
             pickle.dump(chunk, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def load_DataSaver_extra_data(learner, folder='tmp'):
+def load_DataSaver_extra_data(learner, folder="tmp"):
     extra_data = []
-    for fname in sorted(glob(f'{folder}/extra_data_*')):
-        with gzip.open(fname, 'rb') as f:
+    for fname in sorted(glob(f"{folder}/extra_data_*")):
+        with gzip.open(fname, "rb") as f:
             extra_data += pickle.load(f)
     learner.extra_data = collections.OrderedDict(extra_data)
 
 
 def gaussian(x, a, mu, sigma):
-    return a * np.exp(-0.5 * (x - mu)**2 / sigma**2)
+    return a * np.exp(-0.5 * (x - mu) ** 2 / sigma ** 2)
 
 
 def loss(ip):
     from adaptive.learner.learner2D import deviations, areas
+
     A = np.sqrt(areas(ip))
     dev = deviations(ip)[0]
-    loss = A * dev + 0.3*A**2
+    loss = A * dev + 0.3 * A ** 2
     if len(ip.values) < 2000:
         loss *= 100
     return loss
@@ -425,14 +436,15 @@ def smooth_bump(params, pot_params):
     V : function
         Function of position `x`.
     """
-    sigma = params['sigma']
-    V_l = params['V_l']
-    V_r = params['V_r']
-    V_0 = pot_params['V_0']
-    x0 = pot_params['x0']
+    sigma = params["sigma"]
+    V_l = params["V_l"]
+    V_r = params["V_r"]
+    V_0 = pot_params["V_0"]
+    x0 = pot_params["x0"]
     V = lambda x: (
         gaussian(x, V_0, x0, sigma)
-        + V_l + (V_r - V_l) * 0.5 * (1 + np.tanh((x - x0) / sigma))
+        + V_l
+        + (V_r - V_l) * 0.5 * (1 + np.tanh((x - x0) / sigma))
     )
     return V
 
@@ -470,16 +482,18 @@ def get_smooth_bump_params(params):
     |   (% indicated the origin, (x=0, y=0))         |
     +------------------------------------------------+
     """
+
     def minimizer(V_0, params, pot_params):
-        pot_params['V_0'] = V_0
+        pot_params["V_0"] = V_0
         V = smooth_bump(params, pot_params)
-        f_min = lambda x: params['V_0_top'] + params['V_r'] - V(x)
-        op = scipy.optimize.minimize(f_min, pot_params['x0'])
+        f_min = lambda x: params["V_0_top"] + params["V_r"] - V(x)
+        op = scipy.optimize.minimize(f_min, pot_params["x0"])
         return op
-    pot_params = {'x0': params['x0']}
+
+    pot_params = {"x0": params["x0"]}
     V_0 = scipy.optimize.minimize(
-            lambda x: abs(minimizer(x, params, pot_params).fun),
-            x0=params['V_0_top']).x[0]
+        lambda x: abs(minimizer(x, params, pot_params).fun), x0=params["V_0_top"]
+    ).x[0]
     x0 = minimizer(V_0, params, pot_params).x[0]
-    x0 = 2*pot_params['x0'] - x0
-    return {'V_0': V_0, 'x0': x0}
+    x0 = 2 * pot_params["x0"] - x0
+    return {"V_0": V_0, "x0": x0}

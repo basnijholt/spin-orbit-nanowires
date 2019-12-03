@@ -1,16 +1,19 @@
 import inspect
 from collections import OrderedDict
 
+
 def get_names(sig):
-    names = [(name, value) for name, value in sig.parameters.items() if
-             value.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                            inspect.Parameter.KEYWORD_ONLY)]
+    names = [
+        (name, value)
+        for name, value in sig.parameters.items()
+        if value.kind
+        in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+    ]
     return OrderedDict(names)
 
 
 def filter_kwargs(sig, names, kwargs):
-    names_in_kwargs = [(name, value) for name, value in kwargs.items()
-                       if name in names]
+    names_in_kwargs = [(name, value) for name, value in kwargs.items() if name in names]
     return OrderedDict(names_in_kwargs)
 
 
@@ -21,14 +24,13 @@ def skip_pars(names1, names2, num_skipped):
         pars1 = list(names1.values())[num_skipped:]
         pars2 = list(names2.values())[num_skipped:]
     else:
-        raise Exception('First {} arguments '
-                        'have to be the same'.format(num_skipped))
+        raise Exception("First {} arguments " "have to be the same".format(num_skipped))
     return pars1, pars2
 
 
 def combine(f, g, operator, num_skipped=0):
     if not callable(f) or not callable(g):
-        raise Exception('One of the functions is not a function')
+        raise Exception("One of the functions is not a function")
 
     sig1 = inspect.signature(f)
     sig2 = inspect.signature(g)
@@ -50,7 +52,9 @@ def combine(f, g, operator, num_skipped=0):
     pars1_names = [p.name for p in pars1]
     pars2 = [p for p in pars2 if p.name not in pars1_names]
     parameters = pars1 + pars2
-    parameters = [p.replace(kind=inspect.Parameter.KEYWORD_ONLY,
-                            default=p.default) for p in parameters]
+    parameters = [
+        p.replace(kind=inspect.Parameter.KEYWORD_ONLY, default=p.default)
+        for p in parameters
+    ]
     wrapped.__signature__ = inspect.Signature(parameters=skipped_pars + parameters)
     return wrapped
