@@ -41,20 +41,19 @@ def combine(f, g, operator, num_skipped=0):
     pars1, pars2 = skip_pars(names1, names2, num_skipped)
     skipped_pars = list(names1.values())[:num_skipped]
 
-    def wrapped(*args, **kwargs):
-        kwargs1 = filter_kwargs(sig1, names1.keys(), kwargs)
-        kwargs2 = filter_kwargs(sig2, names2.keys(), kwargs)
+    pars1_names = {p.name for p in pars1}
+    pars2 = [p for p in pars2 if p.name not in pars1_names]
 
-        fval = f(*args, **kwargs1)
-        gval = g(*args, **kwargs2)
+    parameters = pars1 + pars2
+    kind = inspect.Parameter.POSITIONAL_OR_KEYWORD
+    parameters = [p.replace(kind=kind) for p in parameters]
+    parameters = skipped_pars + parameters
+
+    def wrapped(*args):
+        d = {p.name: arg for arg, p in zip(args, parameters)}
+        fval = f(*[d[name] for name in names1.keys()])
+        gval = g(*[d[name] for name in names2.keys()])
         return operator(fval, gval)
 
-    pars1_names = [p.name for p in pars1]
-    pars2 = [p for p in pars2 if p.name not in pars1_names]
-    parameters = pars1 + pars2
-    parameters = [
-        p.replace(kind=inspect.Parameter.KEYWORD_ONLY, default=p.default)
-        for p in parameters
-    ]
-    wrapped.__signature__ = inspect.Signature(parameters=skipped_pars + parameters)
+    wrapped.__signature__ = inspect.Signature(parameters=parameters)
     return wrapped
