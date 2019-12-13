@@ -2,6 +2,7 @@ import os
 import os.path
 import sys
 from glob import glob
+from typing import Optional
 
 import matplotlib
 import matplotlib.cm
@@ -57,7 +58,7 @@ def get_new_artists(npoints, learner, data, ax, xy_size):
     return im, line1, line2
 
 
-def generate_cover(learner, save_fname="thesis-cover.pdf"):
+def generate_cover(learner, save_fname: Optional[str] = "thesis-cover.pdf"):
     data = list(learner.data.items())
 
     # measured from the guides in Tomas's thesis: `thesis_cover.pdf`
@@ -151,9 +152,10 @@ def generate_cover(learner, save_fname="thesis-cover.pdf"):
     ax.set_xlim(-x_size / 2, x_size / 2)
     ax.set_ylim(-y_size / 2, y_size / 2)
     print(f"Saving {save_fname}")
-    fig.savefig(
-        save_fname, format="pdf", bbox_inches="tight", pad_inches=0.001, dpi=500
-    )
+    if save_fname is not None:
+        fig.savefig(
+            save_fname, format="pdf", bbox_inches="tight", pad_inches=0.001, dpi=500
+        )
 
 
 def bounds_from_saved_learner(fname):
