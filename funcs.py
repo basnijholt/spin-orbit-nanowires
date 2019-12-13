@@ -17,7 +17,6 @@ import pfaffian as pf
 
 # 3. Internal imports
 from combine import combine
-from common import *
 
 # Parameters taken from arXiv:1204.2792
 # All constant parameters, mostly fundamental constants, in a SimpleNamespace.
@@ -128,7 +127,6 @@ def apply_peierls_to_template(template, xyz_offset=(0, 0, 0)):
 
 
 def get_offset(shape, start, lat):
-    a = np.max(lat.prim_vecs)
     coords = [site.pos for site in lat.shape(shape, start)()]
     xyz_offset = np.mean(coords, axis=0)
     return xyz_offset
@@ -776,7 +774,7 @@ def get_densities(lead, k, params):
     vecs = vecs[:, indxs]
     vals = vals[indxs]
 
-    norbs = lat_from_syst(lead).norbs
+    norbs = common.lat_from_syst(lead).norbs
     densities = np.linalg.norm(vecs.reshape(-1, norbs, len(vecs)), axis=1) ** 2
     return xy, vals, densities.T
 
@@ -803,7 +801,7 @@ def is_antisymmetric(H):
 
 def get_h_k(lead, params):
     h, t = cell_mats(lead, params)
-    h_k = lambda k: h + t * np.exp(1j * k) + t.T.conj() * np.exp(-1j * k)
+    h_k = lambda k: h + t * np.exp(1j * k) + t.T.conj() * np.exp(-1j * k)  # noqa: E731
     return h_k
 
 
@@ -825,7 +823,7 @@ def make_skew_symmetric(ham):
         Skew symmetrized Hamiltonian
     """
     W = ham.shape[0] // 4
-    I = np.eye(2, dtype=complex)
+    I = np.eye(2, dtype=complex)  # noqa: E741
     sigma_y = np.array([[0, 1j], [-1j, 0]], dtype=complex)
     U_1 = np.bmat([[I, I], [1j * I, -1j * I]])
     U_2 = np.bmat([[I, 0 * I], [0 * I, sigma_y]])
@@ -884,13 +882,14 @@ def get_potential(params, syst_pars):
 
 
 def get_potential2(params, syst_pars):
-    V_0 = params["V_0"]
     V_r = params["V_r"]
     V_l = params["V_l"]
     x0 = params["x0"]
     sigma = params["sigma"]
-    V_bottom = lambda x, V_0: (common.gaussian(x, V_0, x0, sigma) if x > x0 else V_0)
-    V_top = lambda x: (
+    V_bottom = lambda x, V_0: (  # noqa: E731
+        common.gaussian(x, V_0, x0, sigma) if x > x0 else V_0
+    )
+    V_top = lambda x: (  # noqa: E731
         V_r + common.gaussian(x, V_l - V_r, x0, sigma) if x > x0 else V_l
     )
     z0 = -syst_pars["r1"]

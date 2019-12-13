@@ -1,6 +1,5 @@
 """Common functions for doing stuff."""
 
-import asyncio
 import collections
 import functools
 import gzip
@@ -8,11 +7,11 @@ import os
 import pickle
 import subprocess
 import sys
-import time
-from copy import copy
 from datetime import timedelta
 from glob import glob
 from itertools import product
+import warnings
+import toolz
 
 import kwant
 import numpy as np
@@ -56,14 +55,14 @@ def run_simulation(lview, func, vals, parameters, fname_i, N=None, overwrite=Fal
             raise Exception("You need to split up vals in smaller parts")
 
     N_files = len(vals) // N + (0 if len(vals) % N == 0 else 1)
-    print("`vals` will be split in {} files.".format(N_files))
+    print(f"`vals` will be split in {N_files} files.")
     time_elapsed = 0
     parts_done = 0
 
     parameters_new = {}
     for k, v in parameters.items():
         if callable(v):
-            warnings.warn('parameters["{}"] is a function and is not saved!'.format(k))
+            warnings.warn(f'parameters["{k}"] is a function and is not saved!')
         else:
             parameters_new[k] = v
     parameters = parameters_new
@@ -71,9 +70,9 @@ def run_simulation(lview, func, vals, parameters, fname_i, N=None, overwrite=Fal
     if N < len(vals) and fname_i.format("1") == fname_i.format("2"):
         raise Exception("Use a formattable string for `fname_i`.")
 
-    for i, chunk in enumerate(partition_all(N, vals)):
+    for i, chunk in enumerate(toolz.partition_all(N, vals)):
         fname = fname_i.replace("{}", "{:03d}").format(i)
-        print("Busy with file: {}.".format(fname))
+        print(f"Busy with file: {fname}.")
         if not os.path.exists(fname) or overwrite:
             map_async = lview.map_async(func, chunk)
             map_async.wait_interactive()
@@ -84,7 +83,7 @@ def run_simulation(lview, func, vals, parameters, fname_i, N=None, overwrite=Fal
             if common_keys:
                 raise Exception(
                     "Parameters in both function result and function input",
-                    ": {}".format(common_keys),
+                    f": {common_keys}",
                 )
             else:
                 df = df.assign(**parameters)
@@ -104,7 +103,7 @@ def run_simulation(lview, func, vals, parameters, fname_i, N=None, overwrite=Fal
             )
             print(print_str.format(fname, N_files_left, time_left))
         else:
-            print("File: {} was already done.".format(fname))
+            print(f"File: {fname} was already done.")
 
 
 def common_elements(list1, list2):
@@ -134,7 +133,7 @@ def combine_dfs(pattern, fname=None):
 
 
 def lat_from_syst(syst):
-    lats = set(s.family for s in syst.sites)
+    lats = {s.family for s in syst.sites}
     if len(lats) > 1:
         raise Exception("No unique lattice in the system.")
     return list(lats)[0]
@@ -362,9 +361,6 @@ def spherical_coords_vec(rs, thetas, phis, degrees=True, unique=False):
 
 
 def add_direction(row):
-    from copy import copy
-
-    d = copy(row)
     xyz = spherical_coords(1, row.pop("theta"), row.pop("phi"))
     if np.any(np.count_nonzero(xyz) > 1):
         raise Exception(
@@ -376,7 +372,7 @@ def add_direction(row):
 
 def save_DataSaver_extra_data(learner, N=10000, folder="tmp"):
     os.makedirs(folder, exist_ok=True)
-    for i, chunk in enumerate(partition_all(N, learner.extra_data.items())):
+    for i, chunk in enumerate(toolz.partition_all(N, learner.extra_data.items())):
         with gzip.open(f"{folder}/extra_data_{i:04d}.pickle", "wb") as f:
             pickle.dump(chunk, f, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -441,7 +437,7 @@ def smooth_bump(params, pot_params):
     V_r = params["V_r"]
     V_0 = pot_params["V_0"]
     x0 = pot_params["x0"]
-    V = lambda x: (
+    V = lambda x: (  # noqa: E731
         gaussian(x, V_0, x0, sigma)
         + V_l
         + (V_r - V_l) * 0.5 * (1 + np.tanh((x - x0) / sigma))
@@ -452,12 +448,12 @@ def smooth_bump(params, pot_params):
 @memoize
 def get_smooth_bump_params(params):
     """Get the parameters for the `smooth_bump` function.
-    
+
     Parameters
     ----------
     params : dict
         With keys `sigma`, `V_l`, `V_r`, `x0`, and `V_0_top`.
-    
+
     Returns
     -------
     smooth_bump_params : dict
@@ -486,7 +482,7 @@ def get_smooth_bump_params(params):
     def minimizer(V_0, params, pot_params):
         pot_params["V_0"] = V_0
         V = smooth_bump(params, pot_params)
-        f_min = lambda x: params["V_0_top"] + params["V_r"] - V(x)
+        f_min = lambda x: params["V_0_top"] + params["V_r"] - V(x)  # noqa: E731
         op = scipy.optimize.minimize(f_min, pot_params["x0"])
         return op
 

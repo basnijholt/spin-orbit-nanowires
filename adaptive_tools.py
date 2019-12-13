@@ -5,12 +5,9 @@ import math
 import os
 import pickle
 import re
-from collections import defaultdict
-from functools import partial
 from glob import glob
 
 import adaptive
-import holoviews as hv
 import toolz
 
 
@@ -108,9 +105,7 @@ def run_learner_in_ipyparallel_client(
 
     if periodic_save:
         try:
-            save_task = learner.start_periodic_saver(
-                runner, folder, fname_pattern, save_interval
-            )
+            learner.start_periodic_saver(runner, folder, fname_pattern, save_interval)
         except AttributeError:
             raise Exception(f"Cannot auto-save {type(learner)}.")
 
@@ -133,7 +128,7 @@ def split_learners_in_executor(
     if goal is None:
         if not periodic_save:
             raise Exception("Turn on periodic saving if there is no goal.")
-        goal = lambda l: False
+        goal = lambda l: False  # noqa: E731
 
     futs = []
     for i, _learners in enumerate(split(learners, ncores)):
@@ -183,6 +178,6 @@ def alphanum_key(s):
     for _s in re.split("([0-9]+)", s):
         try:
             keys.append(int(_s))
-        except:
+        except Exception:
             keys.append(_s)
     return keys
