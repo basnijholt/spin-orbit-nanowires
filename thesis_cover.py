@@ -6,6 +6,8 @@ from typing import Optional
 
 import matplotlib
 import matplotlib.cm
+import matplotlib.font_manager as fm
+import matplotlib.patheffects as patheffects
 import matplotlib.tri as mtri
 import numpy as np
 from matplotlib import pyplot as plt
@@ -47,7 +49,7 @@ def get_new_artists(npoints, learner, data, ax, xy_size):
     new_learner = learner_till(npoints, learner, data)
     (line1, line2), (zs, triang) = plot_tri(new_learner, ax, xy_size)
 
-    data = learner.interpolated_on_grid()[-1]  # This uses the original learner!
+    data = learner.interpolated_on_grid(1000)[-1]  # This uses the original learner!
     x_size, y_size = xy_size
     im = ax.imshow(
         to_gradient(np.rot90(data), horizontal=False),
@@ -58,7 +60,9 @@ def get_new_artists(npoints, learner, data, ax, xy_size):
     return im, line1, line2
 
 
-def generate_cover(learner, save_fname: Optional[str] = "thesis-cover.pdf"):
+def generate_cover(
+    learner, save_fname: Optional[str] = "thesis-cover.pdf", with_lines=True
+):
     data = list(learner.data.items())
 
     # measured from the guides in Tomas's thesis: `thesis_cover.pdf`
@@ -91,18 +95,29 @@ def generate_cover(learner, save_fname: Optional[str] = "thesis-cover.pdf"):
     text_color = "white"
 
     ax.axis("off")
-    text_zorder = 4
+    #     font = "HKNova-Medium.ttf"  # '/System/Library/Fonts/SFNS.ttf'
+    #     font = "/Users/basnijholt/Downloads/bell-gothic-std/BellGothicStd-Light.otf"
+    font = "/Users/basnijholt/Downloads/proxima_ssv/Proxima Nova Thin.otf"
+    text_kwargs = dict(
+        path_effects=[
+            patheffects.withStroke(
+                linewidth=2, foreground="black", capstyle="round", alpha=0.8
+            )
+        ],
+        zorder=4,
+        verticalalignment="center",
+        fontproperties=fm.FontProperties(fname=font),
+    )
     for pos, text in zip([-0.8, 0.7], [author, title]):
         ax.text(
             x_size / 4,
             pos * (y_size - margin) / 2,
-            text,
+            text.upper(),
             color=text_color,
             weight="bold",
-            verticalalignment="center",
+            **text_kwargs,
             horizontalalignment="center",
             fontsize=18,
-            zorder=text_zorder,
         )
 
     ax.text(
@@ -112,9 +127,8 @@ def generate_cover(learner, save_fname: Optional[str] = "thesis-cover.pdf"):
         color=text_color,
         weight="bold",
         fontsize=10,
-        zorder=text_zorder,
         rotation=-90,
-        verticalalignment="center",
+        **text_kwargs,
         horizontalalignment="left",
     )
     ax.text(
@@ -122,32 +136,22 @@ def generate_cover(learner, save_fname: Optional[str] = "thesis-cover.pdf"):
         -y_size / 4 - 1,
         author,
         fontsize=10,
-        zorder=text_zorder,
         color=text_color,
         weight="bold",
         rotation=-90,
-        verticalalignment="center",
+        **text_kwargs,
         horizontalalignment="left",
     )
-
-    for i in [-1, +1]:
-        ax.vlines(
-            i * spine_size / 2, -y_size / 2, y_size / 2, linestyles=":", color="cyan"
-        )
-        ax.vlines(
-            -i * x_size / 2 + i * margin,
-            -y_size / 2,
-            y_size / 2,
-            linestyles=":",
-            color="cyan",
-        )
-        ax.hlines(
-            -i * y_size / 2 + i * margin,
-            -x_size / 2,
-            x_size / 2,
-            linestyles=":",
-            color="cyan",
-        )
+    if with_lines:
+        for i in [-1, +1]:
+            line_kwargs = dict(color="cyan", zorder=10, linestyles=":")
+            ax.vlines(i * spine_size / 2, -y_size / 2, y_size / 2, **line_kwargs)
+            ax.vlines(
+                -i * x_size / 2 + i * margin, -y_size / 2, y_size / 2, **line_kwargs
+            )
+            ax.hlines(
+                -i * y_size / 2 + i * margin, -x_size / 2, x_size / 2, **line_kwargs
+            )
 
     ax.set_xlim(-x_size / 2, x_size / 2)
     ax.set_ylim(-y_size / 2, y_size / 2)
@@ -182,7 +186,7 @@ def save(fname):
         sys.exit(0)
 
     learner = load_learner(fname)
-    generate_cover(learner, pdf_fname)
+    generate_cover(learner, pdf_fname, with_lines=False)
 
 
 if __name__ == "__main__":
