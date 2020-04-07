@@ -61,7 +61,7 @@ def get_new_artists(npoints, learner, data, ax, xy_size):
 
 
 def generate_cover(
-    learner, save_fname: Optional[str] = "thesis-cover.pdf", with_lines=True
+    learner, save_fname: Optional[str] = "thesis-cover.pdf", with_lines=False
 ):
     data = list(learner.data.items())
 
@@ -101,7 +101,7 @@ def generate_cover(
     text_kwargs = dict(
         path_effects=[
             patheffects.withStroke(
-                linewidth=2, foreground="black", capstyle="round", alpha=0.8
+                linewidth=2, foreground="black", capstyle="round", alpha=0.7
             )
         ],
         zorder=4,
@@ -126,22 +126,34 @@ def generate_cover(
         title2,
         color=text_color,
         weight="bold",
-        fontsize=10,
         rotation=-90,
         **text_kwargs,
+        fontsize=12,
         horizontalalignment="left",
     )
     ax.text(
         -0.09,
         -y_size / 4 - 1,
         author,
-        fontsize=10,
         color=text_color,
         weight="bold",
         rotation=-90,
         **text_kwargs,
+        fontsize=12,
         horizontalalignment="left",
     )
+
+    ax.text(
+        -x_size / 4,
+        -0.9 * (y_size - margin) / 2,
+        "Casimir PhD series 2020-11\nISBN 978-90-8593-438-7",
+        fontsize=12,
+        color=text_color,
+        weight="bold",
+        horizontalalignment="center",
+        **text_kwargs,
+    )
+
     if with_lines:
         for i in [-1, +1]:
             line_kwargs = dict(color="cyan", zorder=10, linestyles=":")
@@ -190,6 +202,134 @@ def save(fname):
 
 
 if __name__ == "__main__":
+    chosen = [
+        "data__gradient-sweep-alpha2__data_learner_0587",
+        "data__gradient-sweep-angle-0-45__data_learner_0334",
+        "data__gradient-sweep-alpha__data_learner_0027",
+        "data__gradient-sweep-alpha__data_learner_0190",
+        "data__gradient-sweep-alpha__data_learner_0184",
+        "data__mu-sweep__data_learner_0051",
+        "data__gradient-sweep-angle-0-45__data_learner_0057",
+        "data__gradient-sweep-alpha2__data_learner_0584",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0233",
+        "data__gradient-sweep-alpha__data_learner_0030",
+        "data__gradient-sweep-alpha__data_learner_0187",
+        "data__gradient-sweep-angle-0-45__data_learner_0069",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0811",
+        "data__gradient-sweep-rotation-0-45__data_learner_0016",
+        "data__mu-sweep2__data_learner_0199",
+        "data__gradient-sweep-angle-0-45__data_learner_0068",
+        "data__gradient-sweep-angle-0-45__data_learner_0332",
+        "data__mu-sweep2__data_learner_0200",
+        "data__gradient-sweep-alpha2__data_learner_0379",
+        "data__mu-sweep2__data_learner_0201",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0035",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0021",
+        "data__gradient-sweep-angle-0-45__data_learner_0325",
+        "data__gradient-sweep-alpha__data_learner_0220",
+        "data__gradient-sweep-alpha2__data_learner_0178",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0723",
+        "data__gradient-sweep-alpha2__data_learner_0080",
+        "data__mu-sweep2__data_learner_0259",
+        "data__gradient-sweep-alpha__data_learner_0118",
+        "data__mu-sweep2__data_learner_0113",
+        "data__gradient-sweep-alpha__data_learner_0119",
+        "data__mu-sweep2__data_learner_0258",
+        "data__gradient-sweep-alpha2__data_learner_0444",
+        "data__gradient-sweep-alpha__data_learner_0086",
+        "data__gradient-sweep-alpha__data_learner_0284",
+        "data__gradient-sweep-alpha__data_learner_0286",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0052",
+        "data__gradient-sweep-alpha2__data_learner_0083",
+        "data__gradient-sweep-alpha__data_learner_0087",
+        "data__mu-sweep2__data_learner_0111",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0457",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0709",
+        "data__gradient-sweep-angle-0-45__data_learner_0345",
+        "data__mu-sweep2__data_learner_0049",
+        "data__gradient-sweep-alpha__data_learner_0254",
+        "data__gradient-sweep-alpha2__data_learner_0092",
+        "data__mu-sweep__data_learner_0183",
+        "data__gradient-sweep-alpha2__data_learner_0079",
+        "data__mu-sweep2__data_learner_0115",
+        "data__mu-sweep2__data_learner_0101",
+        "data__mu-sweep2__data_learner_0114",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0693",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0485",
+        "data__gradient-sweep-alpha__data_learner_0094",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0726",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0685",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0691",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0684",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0492",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0479",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0727",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0055",
+        "data__gradient-sweep-alpha__data_learner_0059",
+        "data__gradient-sweep-alpha2__data_learner_0076",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0879",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0461",
+        "data__mu-sweep2__data_learner_0245",
+        "data__mu-sweep2__data_learner_0047",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0703",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0715",
+        "data__gradient-sweep-rotation-0-45__data_learner_0082",
+        "data__gradient-sweep-rotation-0-45__data_learner_0083",
+        "data__gradient-sweep-alpha2__data_learner_0921",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0710",
+        "data__gradient-sweep-alpha2__data_learner_0272",
+        "data__gradient-sweep-alpha__data_learner_0088",
+        "data__mu-sweep2__data_learner_0256",
+        "data__gradient-sweep-alpha__data_learner_0116",
+        "data__mu-sweep2__data_learner_0257",
+        "data__gradient-sweep-alpha__data_learner_0062",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0711",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0705",
+        "data__gradient-sweep-rotation-0-45-move-SO-and-potential__data_learner_0013",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0713",
+        "data__gradient-sweep-alpha__data_learner_0276",
+        "data__gradient-sweep-alpha2__data_learner_0073",
+        "data__gradient-sweep-alpha__data_learner_0060",
+        "data__mu-sweep2__data_learner_0255",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0459",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0471",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0699",
+        "data__gradient-sweep-alpha__data_learner_0061",
+        "data__gradient-sweep-angle-0-45__data_learner_0372",
+        "data__mu-sweep2__data_learner_0233",
+        "data__gradient-sweep-alpha2__data_learner_0175",
+        "data__mu-sweep2__data_learner_0192",
+        "data__mu-sweep2__data_learner_0179",
+        "data__gradient-sweep-angle-0-45__data_learner_0076",
+        "data__mu-sweep2__data_learner_0232",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0748",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0006",
+        "data__gradient-sweep-alpha2__data_learner_0566",
+        "data__gradient-sweep-alpha2__data_learner_0823",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0830",
+        "data__gradient-sweep-angle-0-45__data_learner_0049",
+        "data__gradient-sweep-alpha2__data_learner_0188",
+        "data__mu-sweep2__data_learner_0037",
+        "data__gradient-sweep-alpha__data_learner_0028",
+        "data__mu-sweep2__data_learner_0235",
+        "data__mu-sweep2__data_learner_0180",
+        "data__gradient-sweep-alpha2__data_learner_0370",
+        "data__mu-sweep2__data_learner_0181",
+        "data__gradient-sweep-rotation-0-45-move-SO-and-potential__data_learner_0489",
+        "data__gradient-sweep-alpha__data_learner_0029",
+        "data__mu-sweep2__data_learner_0036",
+        "data__mu-sweep2__data_learner_0034",
+        "data__gradient-sweep-alpha__data_learner_0215",
+        "data__gradient-sweep-rotation-0-90-move-SO-slowly__data_learner_0228",
+        "data__mu-sweep2__data_learner_0236",
+        "data__mu-sweep2__data_learner_0222",
+        "data__gradient-sweep-alpha__data_learner_0188",
+        "data__mu-sweep2__data_learner_0035",
+    ]
+
+    def f_pickle(fname):
+        return fname.replace("__", "/") + ".pickle"
+
     fnames = glob("data/*/*pickle")
     i = int(sys.argv[1])
     fname = fnames[i]
